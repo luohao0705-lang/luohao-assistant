@@ -182,6 +182,7 @@ def list_debts(status: str | None = Query(default=None), _: str = Depends(requir
 def create_account(payload: AccountCreate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
     item = Account(**payload.model_dump())
     db.add(item)
+    db.add(EventLog(event_type="account.created", payload_json=payload.model_dump_json()))
     db.commit()
     db.refresh(item)
     return IdResponse(id=item.id)
@@ -353,6 +354,7 @@ def current_weekly_plan(_: str = Depends(require_auth), db: Session = Depends(ge
 def create_memory(payload: MemoryCreate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
     item = Memory(**payload.model_dump())
     db.add(item)
+    db.add(EventLog(event_type="memory.created", payload_json=payload.model_dump_json()))
     db.commit()
     db.refresh(item)
     return IdResponse(id=item.id)

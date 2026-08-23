@@ -170,6 +170,7 @@ struct FinanceEntryView: View {
     @State private var accountKind = "bank"
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showingConfirmation = false
 
     init(state: AppState, initialEntryType: String = "收支") {
         self.state = state
@@ -207,7 +208,7 @@ struct FinanceEntryView: View {
                 }
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
                 Section {
-                    Button { save() } label: {
+                    Button { requestSave() } label: {
                         HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存记录").fontWeight(.semibold) }; Spacer() }
                     }
                     .disabled(isSaving)
@@ -215,7 +216,22 @@ struct FinanceEntryView: View {
             }
             .navigationTitle("新增财务数据")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .confirmationDialog("确认写入这条财务记录？", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("确认写入", role: .destructive) { save() }
+                Button("返回修改", role: .cancel) { }
+            } message: {
+                Text("写入后会影响现金总览和风险预测，并留下审计记录。")
+            }
         }
+    }
+
+    private func requestSave() {
+        guard let value = Double(amount), value > 0 else { errorMessage = "请输入有效金额"; return }
+        if entryType == "债务" && creditor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { errorMessage = "请输入债权人"; return }
+        if entryType == "账户" && creditor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { errorMessage = "请输入账户名称"; return }
+        _ = value
+        errorMessage = nil
+        showingConfirmation = true
     }
 
     private func save() {
@@ -227,11 +243,9 @@ struct FinanceEntryView: View {
                 if entryType == "收支" {
                     try await state.api.createTransaction(TransactionCreateRequest(accountId: nil, kind: kind, amountCents: Int(value * 100), occurredOn: today(), status: "confirmed", counterparty: counterparty.isEmpty ? nil : counterparty, note: note.isEmpty ? nil : note))
                 } else if entryType == "债务" {
-                    guard !creditor.isEmpty else { throw EntryError.message("请输入债权人") }
                     let outstanding = Double(counterparty) ?? value
                     try await state.api.createDebt(DebtCreateRequest(creditor: creditor, principalCents: Int(value * 100), outstandingCents: Int(outstanding * 100), dueOn: dueOn.isEmpty ? nil : dueOn, interestRate: nil, note: note.isEmpty ? nil : note))
                 } else {
-                    guard !creditor.isEmpty else { throw EntryError.message("请输入账户名称") }
                     try await state.api.createAccount(AccountCreateRequest(name: creditor, kind: accountKind, balanceCents: Int(value * 100), currency: "CNY"))
                 }
                 await state.refreshDashboard()
@@ -257,6 +271,7 @@ struct TransactionEditView: View {
     @State private var note: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showingConfirmation = false
 
     init(state: AppState, item: TransactionSummary) {
         self.state = state
@@ -281,16 +296,29 @@ struct TransactionEditView: View {
                 TextField("对方或用途", text: $counterparty)
                 TextField("备注", text: $note, axis: .vertical)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                Button { save() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存修改").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
+                Button { requestSave() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存修改").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
             }
             .navigationTitle("编辑流水")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .confirmationDialog("确认修改这笔流水？", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("确认写入", role: .destructive) { save() }
+                Button("返回修改", role: .cancel) { }
+            } message: {
+                Text("修改会影响现金总览和风险预测，并留下审计记录。")
+            }
         }
+    }
+
+    private func requestSave() {
+        guard let value = Double(amount), value > 0 else { errorMessage = "请输入有效金额"; return }
+        guard occurredOn.count == 10 else { errorMessage = "日期格式应为 YYYY-MM-DD"; return }
+        _ = value
+        errorMessage = nil
+        showingConfirmation = true
     }
 
     private func save() {
         guard let value = Double(amount), value > 0 else { errorMessage = "请输入有效金额"; return }
-        guard occurredOn.count == 10 else { errorMessage = "日期格式应为 YYYY-MM-DD"; return }
         isSaving = true; errorMessage = nil
         Task {
             do {
@@ -313,6 +341,7 @@ struct DebtEditView: View {
     @State private var note: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showingConfirmation = false
 
     init(state: AppState, item: DebtSummary) {
         self.state = state; self.item = item
@@ -334,11 +363,25 @@ struct DebtEditView: View {
                 Picker("状态", selection: $status) { Text("未偿还").tag("open"); Text("已还清").tag("paid"); Text("已逾期").tag("overdue"); Text("已取消").tag("cancelled") }
                 TextField("备注", text: $note, axis: .vertical)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
-                Button { save() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存修改").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
+                Button { requestSave() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存修改").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
             }
             .navigationTitle("编辑债务")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .confirmationDialog("确认修改这笔债务？", isPresented: $showingConfirmation, titleVisibility: .visible) {
+                Button("确认写入", role: .destructive) { save() }
+                Button("返回修改", role: .cancel) { }
+            } message: {
+                Text("修改会影响还款压力和现金预测，并留下审计记录。")
+            }
         }
+    }
+
+    private func requestSave() {
+        guard let p = Double(principal), p > 0, let o = Double(outstanding), o >= 0 else { errorMessage = "请输入有效金额"; return }
+        guard !creditor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { errorMessage = "请输入债权人"; return }
+        _ = p; _ = o
+        errorMessage = nil
+        showingConfirmation = true
     }
 
     private func save() {

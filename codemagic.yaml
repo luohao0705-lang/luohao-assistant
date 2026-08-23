@@ -24,7 +24,7 @@ workflows:
             -showBuildSettings | grep -E 'PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' || true
       - name: Build IPA
         script: |
-          set -o pipefail
+          set -euo pipefail
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/LuohaoAssistant.xcarchive"
           EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
           LOG_PATH="$CM_BUILD_DIR/build/ios/logs/build-ipa.log"
@@ -35,11 +35,7 @@ workflows:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$ARCHIVE_PATH" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            DEVELOPMENT_TEAM=E6B2H6W823 \
-            CODE_SIGN_IDENTITY="iPhone Distribution" \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="1476c03d-f79b-47e1-b226-40c10281902d" 2>&1 | tee "$LOG_PATH"
+            COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$LOG_PATH"
           cat > "$CM_BUILD_DIR/build/ios/ExportOptions.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
