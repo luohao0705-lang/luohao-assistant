@@ -310,9 +310,14 @@ enum JSONValue: Decodable {
 }
 
 enum APIError: LocalizedError {
-    case invalidResponse; case unauthorized; case network(Error)
+    case invalidResponse; case unauthorized; case server(String); case network(Error)
     var errorDescription: String? {
-        switch self { case .invalidResponse: return "服务器返回了无法识别的数据"; case .unauthorized: return "登录已过期，请重新登录"; case .network: return "网络连接失败，请检查网络后重试" }
+        switch self {
+        case .invalidResponse: return "服务器返回了无法识别的数据"
+        case .unauthorized: return "登录已过期，请重新登录"
+        case .server(let message): return message
+        case .network: return "网络连接失败，请检查网络后重试"
+        }
     }
 }
 
@@ -323,7 +328,7 @@ final class APIClient {
     private init() { token = KeychainStore.read("luohao.session") }
     func login(password: String) async throws {
         var request = URLRequest(url: baseURL.appendingPathComponent("auth/login")); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONEncoder().encode(["password": password])
-        let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+        let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }
         token = try JSONDecoder().decode(LoginResponse.self, from: data).accessToken; if let token { KeychainStore.save(token, key: "luohao.session") }
     }
     func logout() { token = nil; KeychainStore.delete("luohao.session") }
@@ -361,31 +366,31 @@ final class APIClient {
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(TaskUpdateRequest(title: title, status: status, priority: priority, impact: impact, urgency: urgency, blockedReason: blockedReason))
-        let (_, response) = try await perform(request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }
     }
     func command(_ text: String, mode: String = "chat") async throws -> AssistantCommandResponse {
         var request = try authorizedRequest(path: "assistant/command"); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "mode": mode])
-        let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(AssistantCommandResponse.self, from: data)
+        let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }; return try JSONDecoder().decode(AssistantCommandResponse.self, from: data)
     }
-    private func authorized<T: Decodable>(path: String) async throws -> T { let (data, response) = try await perform(authorizedRequest(path: path)); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(T.self, from: data) }
+    private func authorized<T: Decodable>(path: String) async throws -> T { let (data, response) = try await perform(authorizedRequest(path: path)); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }; return try JSONDecoder().decode(T.self, from: data) }
     private func post<T: Encodable>(path: String, payload: T) async throws {
         var request = try authorizedRequest(path: path)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-        let (_, response) = try await perform(request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }
     }
     private func patch<T: Encodable>(path: String, payload: T) async throws {
         var request = try authorizedRequest(path: path)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
-        let (_, response) = try await perform(request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }
     }
-    private func authorizedAction(path: String, method: String) async throws -> ActionResponse { var request = try authorizedRequest(path: path); request.httpMethod = method; let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(ActionResponse.self, from: data) }
+    private func authorizedAction(path: String, method: String) async throws -> ActionResponse { var request = try authorizedRequest(path: path); request.httpMethod = method; let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }; return try JSONDecoder().decode(ActionResponse.self, from: data) }
     private func authorizedRequest(path: String) throws -> URLRequest {
         let url: URL
         if let components = URLComponents(string: path), components.query != nil {
@@ -399,7 +404,25 @@ final class APIClient {
         return request
     }
     private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) { do { return try await URLSession.shared.data(for: request) } catch { throw APIError.network(error) } }
-    private func error(for response: URLResponse) -> APIError { (response as? HTTPURLResponse)?.statusCode == 401 ? .unauthorized : .invalidResponse }
+    private func error(for response: URLResponse, data: Data = Data()) -> APIError {
+        guard let status = (response as? HTTPURLResponse)?.statusCode else { return .invalidResponse }
+        if status == 401 { return .unauthorized }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let detail = object["detail"] {
+            if let text = detail as? String { return .server(localizeServerDetail(text)) }
+            if let items = detail as? [[String: Any]] {
+                let messages = items.compactMap { $0["msg"] as? String }
+                if !messages.isEmpty { return .server(messages.joined(separator: "；")) }
+            }
+        }
+        return .server("服务器请求失败（\(status)）")
+    }
+
+    private func localizeServerDetail(_ value: String) -> String {
+        if value.contains("date") || value.contains("日期") { return "日期格式不正确，请使用 YYYY-MM-DD" }
+        if value.contains("amount") || value.contains("金额") { return "金额不正确，请检查后重试" }
+        if value.contains("not found") { return "数据不存在或已被删除" }
+        return value
+    }
 }
 
 private struct ProjectListResponse: Decodable { let items: [ProjectSummary] }
