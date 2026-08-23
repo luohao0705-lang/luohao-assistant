@@ -131,6 +131,53 @@ def daily_focus(_: str = Depends(require_auth), db: Session = Depends(get_db)) -
     return daily_focus_snapshot(db)
 
 
+@app.get("/finance/accounts")
+def list_accounts(_: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
+    items = db.scalars(select(Account).order_by(Account.id.asc()).limit(100)).all()
+    return {"items": [{
+        "id": item.id, "name": item.name, "kind": item.kind,
+        "balance_cents": item.balance_cents, "currency": item.currency,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+    } for item in items]}
+
+
+@app.get("/finance/transactions")
+def list_transactions(
+    kind: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    query = select(Transaction).order_by(Transaction.occurred_on.desc(), Transaction.id.desc()).limit(200)
+    if kind:
+        query = query.where(Transaction.kind == kind)
+    if status:
+        query = query.where(Transaction.status == status)
+    items = db.scalars(query).all()
+    return {"items": [{
+        "id": item.id, "account_id": item.account_id, "project_id": item.project_id,
+        "kind": item.kind, "amount_cents": item.amount_cents,
+        "occurred_on": item.occurred_on.isoformat(),
+        "expected_on": item.expected_on.isoformat() if item.expected_on else None,
+        "status": item.status, "counterparty": item.counterparty, "note": item.note,
+    } for item in items]}
+
+
+@app.get("/finance/debts")
+def list_debts(status: str | None = Query(default=None), _: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
+    query = select(Debt).order_by(Debt.due_on.asc().nullslast(), Debt.id.desc()).limit(100)
+    if status:
+        query = query.where(Debt.status == status)
+    items = db.scalars(query).all()
+    return {"items": [{
+        "id": item.id, "creditor": item.creditor,
+        "principal_cents": item.principal_cents, "outstanding_cents": item.outstanding_cents,
+        "due_on": item.due_on.isoformat() if item.due_on else None,
+        "interest_rate": float(item.interest_rate) if item.interest_rate is not None else None,
+        "status": item.status, "note": item.note,
+    } for item in items]}
+
+
 @app.post("/finance/accounts", response_model=IdResponse)
 def create_account(payload: AccountCreate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
     item = Account(**payload.model_dump())

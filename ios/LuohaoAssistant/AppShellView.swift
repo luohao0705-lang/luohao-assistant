@@ -136,7 +136,7 @@ struct ProjectsView: View {
                                 HStack { Text(project.name).font(.headline); Spacer(); Text(project.stage).font(.caption).foregroundStyle(.secondary) }
                                 Text(project.nextAction ?? project.objective ?? "尚未定义下一步")
                                     .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                                Text("待办 (project.openTaskCount) 项")
+                                Text("待办 \(project.openTaskCount) 项")
                                     .font(.caption).foregroundStyle(.orange)
                             }
                             .padding(.vertical, 6)
