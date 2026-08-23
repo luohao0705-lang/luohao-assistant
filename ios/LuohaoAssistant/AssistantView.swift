@@ -249,6 +249,20 @@ struct AssistantView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 132)
 
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("清空输入内容")
+                    .accessibilityHint("删除输入框中的全部文字")
+                }
+
                 Spacer()
 
                 if voice.isRecording {
