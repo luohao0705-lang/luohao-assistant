@@ -83,6 +83,26 @@ struct DebtCreateRequest: Encodable {
     enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case note }
 }
 
+struct MemorySummary: Decodable, Identifiable {
+    let id: Int
+    let memoryType: String
+    let content: String
+    let projectId: Int?
+    let source: String?
+    enum CodingKeys: String, CodingKey { case id; case memoryType = "memory_type"; case content; case projectId = "project_id"; case source }
+}
+
+struct DecisionSummary: Decodable, Identifiable {
+    let id: Int
+    let projectId: Int?
+    let title: String
+    let context: String?
+    let decision: String
+    let rationale: String?
+    let reviewOn: String?
+    enum CodingKeys: String, CodingKey { case id; case projectId = "project_id"; case title, context, decision, rationale; case reviewOn = "review_on" }
+}
+
 struct AssistantCommandResponse: Decodable {
     let reply: String
     let snapshot: DashboardSummary
@@ -214,6 +234,8 @@ final class APIClient {
     func debts() async throws -> [DebtSummary] { let response: DebtListResponse = try await authorized(path: "finance/debts"); return response.items }
     func createTransaction(_ payload: TransactionCreateRequest) async throws { try await post(path: "finance/transactions", payload: payload) }
     func createDebt(_ payload: DebtCreateRequest) async throws { try await post(path: "finance/debts", payload: payload) }
+    func memories() async throws -> [MemorySummary] { let response: MemoryListResponse = try await authorized(path: "memories"); return response.items }
+    func decisions() async throws -> [DecisionSummary] { let response: DecisionListResponse = try await authorized(path: "decisions"); return response.items }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
     func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
@@ -264,6 +286,8 @@ private struct TaskListResponse: Decodable { let items: [FocusTask] }
 private struct AccountListResponse: Decodable { let items: [AccountSummary] }
 private struct TransactionListResponse: Decodable { let items: [TransactionSummary] }
 private struct DebtListResponse: Decodable { let items: [DebtSummary] }
+private struct MemoryListResponse: Decodable { let items: [MemorySummary] }
+private struct DecisionListResponse: Decodable { let items: [DecisionSummary] }
 private struct CashflowResponse: Decodable { let days: Int; let points: [CashflowPoint] }
 private struct ActionListResponse: Decodable { let items: [AssistantAction] }
 private struct ActionResponse: Decodable { let id: Int; let actionType: String; let status: String; enum CodingKeys: String, CodingKey { case id; case actionType = "action_type"; case status } }

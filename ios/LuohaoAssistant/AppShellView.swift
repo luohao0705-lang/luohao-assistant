@@ -296,6 +296,10 @@ struct SettingsView: View {
                     LabeledContent("服务地址", value: "luo.hsh6.com")
                     LabeledContent("状态", value: state.errorMessage == nil ? "已连接" : "需要检查")
                 }
+                Section("经营知识") {
+                    NavigationLink("记忆库") { KnowledgeView(state: state, mode: .memories) }
+                    NavigationLink("决策记录") { KnowledgeView(state: state, mode: .decisions) }
+                }
                 Section("关于") {
                     Text("洛浩经营台")
                     Text("现金、风险和事项规划的个人经营系统")
@@ -304,6 +308,42 @@ struct SettingsView: View {
             }
             .navigationTitle("设置")
         }
+    }
+}
+
+struct KnowledgeView: View {
+    enum Mode: Equatable { case memories, decisions }
+    @ObservedObject var state: AppState
+    let mode: Mode
+    var body: some View {
+        List {
+            if mode == .memories {
+                Section("已记录的经营信息") {
+                    if state.memories.isEmpty { Text("还没有记忆。你可以在 AI 助理中说：记住这件事……").foregroundStyle(.secondary) }
+                    ForEach(state.memories) { memory in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(memory.content)
+                            Text("来源：\(memory.source ?? "手动记录")").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+            } else {
+                Section("需要复盘的决策") {
+                    if state.decisions.isEmpty { Text("还没有决策记录。重要决定可以让 AI 助理帮你留下背景和理由。").foregroundStyle(.secondary) }
+                    ForEach(state.decisions) { decision in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(decision.title).font(.headline)
+                            Text(decision.decision)
+                            if let reviewOn = decision.reviewOn { Text("复盘日期：\(reviewOn)").font(.caption).foregroundStyle(.orange) }
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+            }
+        }
+        .navigationTitle(mode == .memories ? "记忆库" : "决策记录")
+        .refreshable { await state.refreshDashboard() }
     }
 }
 
