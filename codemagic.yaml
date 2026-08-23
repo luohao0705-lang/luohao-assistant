@@ -21,9 +21,12 @@ workflows:
           xcode-project use-profiles
       - name: Build IPA
         script: |
+          set -o pipefail
+          mkdir -p "$CM_BUILD_DIR/build/ios/logs"
           xcode-project build-ipa \
             --project ios/LuohaoAssistant.xcodeproj \
-            --scheme LuohaoAssistant
+            --scheme LuohaoAssistant 2>&1 | tee "$CM_BUILD_DIR/build/ios/logs/build-ipa.log"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/**/*.log
+      - build/ios/logs/*.log
