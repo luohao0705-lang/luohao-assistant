@@ -387,6 +387,7 @@ struct TasksView: View {
                     }
                 }
             }
+            }
             .navigationTitle("事项")
             .refreshable { await state.refreshDashboard() }
         }
