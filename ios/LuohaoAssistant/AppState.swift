@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     @Published var cashflow: [CashflowPoint] = []
     @Published var dailyFocus: DailyFocus?
     @Published var projects: [ProjectSummary] = []
+    @Published var tasks: [FocusTask] = []
     @Published var weeklyPlan: WeeklyPlan?
     @Published var pendingActions: [AssistantAction] = []
     @Published var errorMessage: String?
@@ -38,6 +39,7 @@ final class AppState: ObservableObject {
         cashflow = []
         dailyFocus = nil
         projects = []
+        tasks = []
         weeklyPlan = nil
         pendingActions = []
         isAuthenticated = false
@@ -50,12 +52,14 @@ final class AppState: ObservableObject {
             async let cashflowPoints = api.cashflow()
             async let focus = api.dailyFocus()
             async let projectList = api.projects()
+            async let taskList = api.tasks()
             async let plan = api.currentWeeklyPlan()
             async let actions = api.pendingActions()
             dashboard = try await summary
             cashflow = try await cashflowPoints
             dailyFocus = try await focus
             projects = try await projectList
+            tasks = try await taskList
             weeklyPlan = try await plan.item
             pendingActions = try await actions
         } catch let error as APIError {

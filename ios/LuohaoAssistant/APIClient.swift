@@ -158,6 +158,7 @@ final class APIClient {
     }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
+    func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
     func currentWeeklyPlan() async throws -> WeeklyPlanResponse { try await authorized(path: "weekly-plans/current") }
     func pendingActions() async throws -> [AssistantAction] { let response: ActionListResponse = try await authorized(path: "assistant/actions"); return response.items.filter { $0.status == "pending" } }
     func confirmAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/confirm", method: "POST") }
@@ -193,6 +194,7 @@ final class APIClient {
 }
 
 private struct ProjectListResponse: Decodable { let items: [ProjectSummary] }
+private struct TaskListResponse: Decodable { let items: [FocusTask] }
 private struct CashflowResponse: Decodable { let days: Int; let points: [CashflowPoint] }
 private struct ActionListResponse: Decodable { let items: [AssistantAction] }
 private struct ActionResponse: Decodable { let id: Int; let actionType: String; let status: String; enum CodingKeys: String, CodingKey { case id; case actionType = "action_type"; case status } }

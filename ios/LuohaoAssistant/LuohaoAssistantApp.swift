@@ -10,7 +10,7 @@ struct LuohaoAssistantApp: App {
                 Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
                 Group {
-                    if state.isAuthenticated { DashboardView(state: state) }
+                    if state.isAuthenticated { AppShellView(state: state) }
                     else { LoginView(state: state) }
                 }
             }
