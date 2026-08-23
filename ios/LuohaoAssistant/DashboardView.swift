@@ -46,10 +46,10 @@ struct DashboardView: View {
                 Text("录入预计收入、支出和还款日期后，这里会显示现金安全边界。你也可以直接对 AI 助理说：下个月有一笔支出。").font(.subheadline).foregroundStyle(.secondary)
             } else {
                 Chart(state.cashflow) { point in
-                    LineMark(x: .value("Date", point.date), y: .value("Balance", Double(point.balanceCents) / 100))
+                    LineMark(x: .value("日期", point.date), y: .value("余额", Double(point.balanceCents) / 100))
                         .foregroundStyle(.orange)
                         .interpolationMethod(.monotone)
-                    AreaMark(x: .value("Date", point.date), y: .value("Balance", Double(point.balanceCents) / 100))
+                    AreaMark(x: .value("日期", point.date), y: .value("余额", Double(point.balanceCents) / 100))
                         .foregroundStyle(.orange.opacity(0.12))
                 }
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisValueLabel { if let amount = value.as(Double.self) { Text(currency.string(from: NSNumber(value: amount)) ?? "-").font(.caption2) } } } }
