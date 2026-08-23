@@ -19,6 +19,9 @@ workflows:
       - name: Apply signing profiles
         script: |
           xcode-project use-profiles
+          xcodebuild -project ios/LuohaoAssistant.xcodeproj \
+            -scheme LuohaoAssistant \
+            -showBuildSettings | grep -E 'PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN_STYLE|CODE_SIGN_IDENTITY|PROVISIONING_PROFILE' || true
       - name: Build IPA
         script: |
           set -o pipefail
