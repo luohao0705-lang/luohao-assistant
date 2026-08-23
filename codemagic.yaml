@@ -1,0 +1,29 @@
+workflows:
+  ios-adhoc:
+    name: Luohao Assistant Ad Hoc IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: 15.4
+      ios_signing:
+        distribution_type: ad_hoc
+        bundle_identifier: app.ocelot3040.maroon4586
+    scripts:
+      - name: Generate Xcode project
+        script: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          cd ios
+          xcodegen generate
+      - name: Apply signing profiles
+        script: |
+          xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project ios/LuohaoAssistant.xcodeproj \
+            --scheme LuohaoAssistant
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/**/*.log
