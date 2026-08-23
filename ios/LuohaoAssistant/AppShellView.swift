@@ -56,6 +56,12 @@ struct FinanceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     pageHeader("财务中枢", subtitle: "先看现金安全，再安排支出和还款")
+                    if state.dashboard == nil, let error = state.errorMessage {
+                        DataStatusBanner(message: error, retry: { await state.refreshDashboard() })
+                    }
+                    if state.financeDataUnavailable {
+                        DataStatusBanner(message: "财务明细接口暂时不可用，请检查服务器版本或网络。", retry: { await state.refreshDashboard() })
+                    }
                     if let dashboard = state.dashboard {
                         HStack(spacing: 12) {
                             metric("可用现金", dashboard.cashCents, .orange)
@@ -664,7 +670,9 @@ struct KnowledgeView: View {
     @State private var showingEntry = false
     var body: some View {
         List {
-            if mode == .memories {
+            if state.knowledgeDataUnavailable {
+                ContentUnavailableView("经营知识暂时无法加载", systemImage: "wifi.exclamationmark", description: Text("请检查网络后重试。"))
+            } else if mode == .memories {
                 Section("已记录的经营信息") {
                     if state.memories.isEmpty { Text("还没有记忆。你可以在 AI 助理中说：记住这件事……").foregroundStyle(.secondary) }
                     ForEach(state.memories) { memory in
@@ -696,6 +704,20 @@ struct KnowledgeView: View {
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showingEntry = true } label: { Image(systemName: "plus") }.accessibilityLabel(mode == .memories ? "新增记忆" : "新增决策") } }
         .sheet(isPresented: $showingEntry) { if mode == .memories { MemoryEntryView(state: state) } else { DecisionEntryView(state: state) } }
         .refreshable { await state.refreshDashboard() }
+    }
+}
+
+private struct DataStatusBanner: View {
+    let message: String
+    let retry: () async -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange)
+            Button("重试") { Task { await retry() } }.buttonStyle(.bordered).tint(.orange)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
