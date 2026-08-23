@@ -1,0 +1,22 @@
+name: LuohaoAssistant
+options:
+  bundleIdPrefix: app.ocelot3040
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+targets:
+  LuohaoAssistant:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: LuohaoAssistant
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.ocelot3040.maroon4586
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Use the microphone to capture spoken tasks and financial updates."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Use speech recognition to turn spoken instructions into text."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your operating data."
+        TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets: []

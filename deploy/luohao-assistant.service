@@ -1,0 +1,21 @@
+[Unit]
+Description=Luohao Assistant API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=luohaoassistant
+Group=luohaoassistant
+WorkingDirectory=/srv/luohao-assistant/backend
+EnvironmentFile=/etc/luohao-assistant/api.env
+EnvironmentFile=/etc/luohao-assistant/database.env
+ExecStart=/srv/luohao-assistant/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 18091 --proxy-headers
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

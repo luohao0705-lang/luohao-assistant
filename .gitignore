@@ -1,0 +1,17 @@
+backend/.env
+backend/.venv/
+backend/*.db
+backend/__pycache__/
+backend/app/__pycache__/
+**/__pycache__/
+ios/.build/
+ios/DerivedData/
+*.xcuserstate
+*.xcuserdata
+.DS_Store
+
+# Apple signing material and private keys
+*.p12
+*.mobileprovision
+*.p8
+*.pem

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: luohao-assistant-api
+Version: 0.1.0
+Summary: Single-user entrepreneur operations assistant API
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Requires-Dist: sqlalchemy<3,>=2.0
+Requires-Dist: pydantic-settings<3,>=2.5
+Requires-Dist: python-jose[cryptography]<4,>=3.3
+Requires-Dist: pwdlib[argon2]<1,>=0.2
+Requires-Dist: httpx<1,>=0.27
+Requires-Dist: psycopg[binary]<4,>=3.2
+Requires-Dist: alembic<2,>=1.14
