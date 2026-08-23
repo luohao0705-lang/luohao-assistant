@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory() as directory:
     from app.assistant import execute_tool
     from app.db import SessionLocal, engine
     from app.main import app
+    from app.models import EventLog
 
     client = TestClient(app)
     login = client.post("/auth/login", json={"password": "test-password-123"})
@@ -78,6 +79,10 @@ with tempfile.TemporaryDirectory() as directory:
     assert weekly.status_code == 200, weekly.text
     current = client.get("/weekly-plans/current", headers=headers)
     assert current.status_code == 200 and current.json()["item"]["theme"] == "Validate"
+    audit_db = SessionLocal()
+    event_types = {item.event_type for item in audit_db.query(EventLog).all()}
+    assert {"account.created", "transaction.created", "debt.created", "assistant.action.proposed", "assistant.action.confirmed"}.issubset(event_types), event_types
+    audit_db.close()
     engine.dispose()
 
 print("operating smoke ok")
