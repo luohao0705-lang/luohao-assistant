@@ -12,6 +12,9 @@ struct LoginView: View {
             Button("Sign in") { Task { await state.login(password: password) } }.buttonStyle(.borderedProminent).disabled(password.count < 8 || state.isLoading)
             if let error = state.errorMessage { Text(error).foregroundStyle(.red) }
             Spacer()
-        }.padding(24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 24)
     }
 }

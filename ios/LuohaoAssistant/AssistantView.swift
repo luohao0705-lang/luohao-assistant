@@ -30,12 +30,12 @@ struct AssistantView: View {
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                HStack {
+                HStack(alignment: .bottom, spacing: 10) {
                     Button { Task { await voice.toggle() } } label: { Image(systemName: voice.isRecording ? "stop.circle.fill" : "mic.fill").font(.title2).foregroundStyle(voice.isRecording ? .red : .orange) }.accessibilityLabel(voice.isRecording ? "Stop recording" : "Start voice input")
                     VStack(alignment: .leading, spacing: 4) {
                         Picker("Mode", selection: $mode) { Text("Chat").tag("chat"); Text("Plan").tag("plan") }.pickerStyle(.segmented)
                         TextField("Describe your arrangement", text: $text, axis: .vertical).textFieldStyle(.roundedBorder)
-                    }
+                    }.frame(maxWidth: .infinity)
                     Button { send() } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending).accessibilityLabel("Send")
                 }
             }.padding().navigationTitle("AI assistant").onChange(of: voice.transcript) { _, value in if !value.isEmpty { text = value } }

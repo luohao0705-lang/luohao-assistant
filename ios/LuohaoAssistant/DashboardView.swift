@@ -20,7 +20,10 @@ struct DashboardView: View {
                         weeklySection
                         if !state.pendingActions.isEmpty { actionSection }
                         if !d.riskFlags.isEmpty { riskSection(d.riskFlags) }
-                    }.padding(.horizontal).padding(.vertical, 12)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
                 } else if let error = state.errorMessage { ContentUnavailableView("Unable to load operating state", systemImage: "wifi.exclamationmark", description: Text(error)) } else { ProgressView().padding(.top, 80) }
             }
             .refreshable { await state.refreshDashboard() }
