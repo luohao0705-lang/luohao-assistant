@@ -35,6 +35,9 @@ struct AssistantView: View {
                                 }
                             }.padding(12).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                         }
+                        if let voiceError = voice.errorMessage {
+                            Label(voiceError, systemImage: "mic.slash").font(.caption).foregroundStyle(.red)
+                        }
                         if let error = state.errorMessage, reply.isEmpty {
                             ContentUnavailableView("暂时无法连接助理", systemImage: "wifi.exclamationmark", description: Text(error))
                         }
