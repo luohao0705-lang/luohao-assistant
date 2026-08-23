@@ -86,6 +86,9 @@ struct AssistantView: View {
             .onChange(of: voice.transcript) { _, value in
                 if !value.isEmpty { text = value }
             }
+            .onChange(of: mode) { _, newMode in
+                resetConversation(for: newMode)
+            }
             .onDisappear {
                 requestTask?.cancel()
                 requestTask = nil
@@ -317,6 +320,23 @@ struct AssistantView: View {
     }
 
     private var sendButtonColor: Color { isSending ? .secondary : .orange }
+
+    private func resetConversation(for newMode: String) {
+        requestTask?.cancel()
+        requestTask = nil
+        isSending = false
+        text = ""
+        lastPrompt = ""
+        messages = [AssistantMessage(
+            role: .assistant,
+            text: newMode == "plan"
+                ? "现在进入规划模式。告诉我你要推进的项目、事项或财务登记，我会先整理成待确认方案。"
+                : "现在进入问答模式。你可以查询现金、债务、项目、任务和经营风险；此模式不会写入数据。",
+            suggestions: newMode == "plan"
+                ? ["安排今天最重要的三件事", "登记一笔收入", "拆解一个项目"]
+                : ["查看现金风险", "查看今天重点", "查看当前债务"]
+        )]
+    }
 
     private func send(promptOverride: String? = nil) {
         let prompt = (promptOverride ?? text).trimmingCharacters(in: .whitespacesAndNewlines)

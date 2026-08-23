@@ -195,8 +195,11 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
     messages.extend(history_messages)
     messages.append({"role": "user", "content": text})
     available_tools = tools_for_mode(mode)
+    # DeepSeek reasoner currently rejects function calling requests on some
+    # deployments. Planning must be able to create a pending action, so use
+    # the tool-capable chat model for both modes.
     payload = {
-        "model": settings.deepseek_reasoner_model if is_planning else settings.deepseek_chat_model,
+        "model": settings.deepseek_chat_model,
         "messages": messages,
         "tools": available_tools,
         "tool_choice": "required" if is_planning else "auto",
