@@ -90,6 +90,12 @@ def _create_task(data: dict, db: Session, default_project_id: int | None = None)
         from datetime import date
         payload["due_on"] = date.fromisoformat(payload["due_on"])
     payload.setdefault("project_id", default_project_id)
+    if not payload.get("title"):
+        fallback_title = payload.get("name") or payload.get("task") or payload.get("description")
+        if fallback_title:
+            payload["title"] = str(fallback_title)[:240]
+        else:
+            raise HTTPException(status_code=422, detail="待办方案缺少事项标题，请让助理重新整理")
     allowed = {"title", "description", "project_id", "priority", "due_on", "impact", "urgency", "estimated_minutes", "waiting_on"}
     task = Task(**{key: value for key, value in payload.items() if key in allowed})
     db.add(task)
@@ -397,6 +403,27 @@ def list_actions(status: str | None = Query(default=None), _: str = Depends(requ
 
 def _confirm_action(action: AssistantAction, db: Session) -> dict:
     payload = json.loads(action.payload_json)
+    if action.action_type == "propose_finance_entry":
+        from datetime import date
+        kind = payload.get("kind")
+        amount_cents = int(payload.get("amount_cents") or 0)
+        if kind not in {"income", "expense"} or amount_cents <= 0:
+            raise HTTPException(status_code=422, detail="财务方案缺少有效的收支方向或金额")
+        occurred_on = date.fromisoformat(payload["occurred_on"])
+        expected_on = date.fromisoformat(payload["expected_on"]) if payload.get("expected_on") else None
+        item = Transaction(
+            account_id=payload.get("account_id"),
+            kind=kind,
+            amount_cents=amount_cents,
+            occurred_on=occurred_on,
+            expected_on=expected_on,
+            status=payload.get("status", "confirmed"),
+            counterparty=payload.get("counterparty"),
+            note=payload.get("note"),
+        )
+        db.add(item)
+        db.flush()
+        return {"transaction_id": item.id, "amount_cents": amount_cents, "kind": kind}
     if action.action_type == "propose_tasks":
         task_ids = [_create_task(task_data, db, payload.get("project_id")).id for task_data in payload.get("tasks", [])]
         return {"task_ids": task_ids, "count": len(task_ids)}

@@ -21,7 +21,7 @@ func localizedDebtStatus(_ value: String) -> String {
 }
 
 func localizedActionType(_ value: String) -> String {
-    ["propose_tasks": "新增事项方案", "create_project_plan": "建立项目方案", "create_weekly_plan": "生成本周计划"][value] ?? "待确认操作"
+    ["propose_finance_entry": "登记财务记录", "propose_tasks": "新增事项方案", "create_project_plan": "建立项目方案", "create_weekly_plan": "生成本周计划"][value] ?? "待确认操作"
 }
 
 func localizedToolName(_ value: String) -> String {

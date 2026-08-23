@@ -198,7 +198,14 @@ struct AssistantView: View {
                             .tint(.secondary)
 
                             Button {
-                                Task { await state.resolveAction(action, confirm: true) }
+                                Task {
+                                    let confirmed = await state.resolveAction(action, confirm: true)
+                                    if confirmed {
+                                        messages.append(AssistantMessage(role: .assistant, text: "已确认执行，数据已经写入并同步到总览。"))
+                                    } else {
+                                        messages.append(AssistantMessage(role: .assistant, text: "确认失败：\(state.errorMessage ?? "服务器没有完成写入，请稍后重试。")", isError: true))
+                                    }
+                                }
                             } label: {
                                 Label("确认执行", systemImage: "checkmark")
                             }
@@ -445,6 +452,7 @@ struct AssistantView: View {
     private func actionTitle(_ type: String) -> String {
         [
             "propose_tasks": "新增事项方案",
+            "propose_finance_entry": "登记财务记录",
             "create_project_plan": "建立项目方案",
             "create_weekly_plan": "生成本周计划",
             "create_memory": "记录一条经营记忆",
@@ -455,6 +463,14 @@ struct AssistantView: View {
     private func actionSummary(_ value: JSONValue) -> String {
         switch value {
         case .object(let object):
+            if let amount = object["amount_cents"], case .number(let cents) = amount {
+                let kind = object["kind"].flatMap { value -> String? in
+                    if case .string(let text) = value { return text }
+                    return nil
+                }
+                let label = kind == "income" ? "收入" : "支出"
+                return "\(label) \(String(format: "%.2f", cents / 100)) 元"
+            }
             for key in ["name", "title", "objective", "next_action", "decision", "content"] {
                 if let item = object[key], case .string(let value) = item, !value.isEmpty { return value }
             }

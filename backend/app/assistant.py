@@ -10,7 +10,8 @@ from .config import get_settings
 from .models import Account, AssistantAction, Debt, EventLog, Memory, Project, Task, Transaction, WeeklyPlan
 
 TOOLS = [
-    {"type": "function", "function": {"name": "propose_tasks", "description": "Propose tasks; owner confirmation is required.", "parameters": {"type": "object", "properties": {"project_id": {"type": ["integer", "null"]}, "tasks": {"type": "array", "items": {"type": "object"}}}, "required": ["tasks"]}}},
+    {"type": "function", "function": {"name": "propose_finance_entry", "description": "Propose an income, expense, debt, or account entry. Use this for recording money; owner confirmation is required before writing.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["income", "expense"]}, "amount_cents": {"type": "integer"}, "occurred_on": {"type": "string"}, "expected_on": {"type": ["string", "null"]}, "counterparty": {"type": ["string", "null"]}, "note": {"type": ["string", "null"]}, "account_id": {"type": ["integer", "null"]}}, "required": ["kind", "amount_cents", "occurred_on"]}}},
+    {"type": "function", "function": {"name": "propose_tasks", "description": "Propose tasks; owner confirmation is required. Each task must include a short title.", "parameters": {"type": "object", "properties": {"project_id": {"type": ["integer", "null"]}, "tasks": {"type": "array", "items": {"type": "object", "required": ["title"]}}}, "required": ["tasks"]}}},
     {"type": "function", "function": {"name": "create_project_plan", "description": "Propose a project plan; owner confirmation is required.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "objective": {"type": "string"}, "success_criteria": {"type": ["string", "null"]}, "key_hypothesis": {"type": ["string", "null"]}, "risk_summary": {"type": ["string", "null"]}, "next_action": {"type": ["string", "null"]}, "priority": {"type": "integer"}, "due_on": {"type": ["string", "null"]}, "tasks": {"type": "array", "items": {"type": "object"}}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "create_weekly_plan", "description": "Propose a weekly plan; owner confirmation is required.", "parameters": {"type": "object", "properties": {"week_start": {"type": "string"}, "theme": {"type": ["string", "null"]}, "outcomes": {"type": "array", "items": {"type": "string"}}, "priorities": {"type": "array", "items": {"type": "string"}}, "risks": {"type": "array", "items": {"type": "string"}}}, "required": ["week_start", "outcomes", "priorities"]}}},
     {"type": "function", "function": {"name": "get_daily_focus", "description": "Read today's prioritized command center.", "parameters": {"type": "object", "properties": {}}}},
@@ -107,7 +108,7 @@ def execute_tool(name: str, arguments: dict, db: Session) -> dict:
         return dashboard_snapshot(db)
     if name == "get_daily_focus":
         return daily_focus_snapshot(db)
-    if name in {"propose_tasks", "create_project_plan", "create_weekly_plan"}:
+    if name in {"propose_finance_entry", "propose_tasks", "create_project_plan", "create_weekly_plan"}:
         return _pending_action(name, arguments, db)
     return {"error": f"unsupported tool: {name}"}
 
@@ -130,7 +131,7 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         for item in pending
     ]
     messages = [
-        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
+        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。涉及登记收入、支出、收款、付款、贷款、债务或账户金额时，必须使用 propose_finance_entry，不能用事项工具代替。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
         {"role": "system", "content": json.dumps({"dashboard": snapshot, "daily_focus": daily_focus, "memories": memory_context, "pending_actions": pending_context}, ensure_ascii=False)},
     ]
     # The API is stateless, so the iOS client sends a bounded recent transcript.

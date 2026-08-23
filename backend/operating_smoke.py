@@ -66,6 +66,19 @@ with tempfile.TemporaryDirectory() as directory:
     project_action_id = client.get("/assistant/actions?status=pending", headers=headers).json()["items"][-1]["id"]
     project_confirmation = client.post(f"/assistant/actions/{project_action_id}/confirm", headers=headers)
     assert project_confirmation.status_code == 200 and project_confirmation.json()["result"]["project_id"]
+    finance_db = SessionLocal()
+    finance_proposal = execute_tool("propose_finance_entry", {"kind": "income", "amount_cents": 68000, "occurred_on": today.isoformat(), "counterparty": "微信小店"}, db=finance_db)
+    finance_db.close()
+    assert finance_proposal["status"] == "pending_confirmation"
+    finance_action_id = client.get("/assistant/actions?status=pending", headers=headers).json()["items"][-1]["id"]
+    finance_confirmation = client.post(f"/assistant/actions/{finance_action_id}/confirm", headers=headers)
+    assert finance_confirmation.status_code == 200 and finance_confirmation.json()["result"]["transaction_id"]
+    legacy_db = SessionLocal()
+    legacy_proposal = execute_tool("propose_tasks", {"tasks": [{"description": "兼容旧版本事项草案"}]}, db=legacy_db)
+    legacy_db.close()
+    legacy_action_id = client.get("/assistant/actions?status=pending", headers=headers).json()["items"][-1]["id"]
+    legacy_confirmation = client.post(f"/assistant/actions/{legacy_action_id}/confirm", headers=headers)
+    assert legacy_confirmation.status_code == 200 and legacy_confirmation.json()["result"]["count"] == 1
     weekly_db = SessionLocal()
     weekly_proposal = execute_tool("create_weekly_plan", {"week_start": "2026-08-31", "theme": "Focus", "outcomes": ["Ship one thing"], "priorities": ["Build"]}, db=weekly_db)
     weekly_db.close()
