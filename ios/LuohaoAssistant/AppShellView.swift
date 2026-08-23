@@ -39,6 +39,7 @@ struct AppShellView: View {
 
 struct FinanceView: View {
     @ObservedObject var state: AppState
+    @State private var section = "概览"
     private let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -68,9 +69,14 @@ struct FinanceView: View {
                         cashflowMiniChart
                     }
                     sectionTitle("下一步", detail: nil)
-                    Text("财务明细、账户和债务编辑将在下一阶段接入。当前所有金额均来自经营看板实时数据。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Picker("财务视图", selection: $section) {
+                        Text("概览").tag("概览")
+                        Text("账户").tag("账户")
+                        Text("流水").tag("流水")
+                        Text("债务").tag("债务")
+                    }
+                    .pickerStyle(.segmented)
+                    financeDetail
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -95,6 +101,33 @@ struct FinanceView: View {
             .frame(height: 170)
             .padding(12)
             .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder private var financeDetail: some View {
+        switch section {
+        case "账户":
+            if state.accounts.isEmpty { empty("还没有账户", message: "使用 AI 助理或后续新增账户。", icon: "building.columns") }
+            else { ForEach(state.accounts) { account in detailRow(account.name, account.kind, account.balanceCents, account.currency) } }
+        case "流水":
+            if state.transactions.isEmpty { empty("还没有流水", message: "收入和支出会在这里按日期记录。", icon: "list.bullet.rectangle") }
+            else { ForEach(state.transactions.prefix(20)) { item in detailRow(item.counterparty ?? (item.kind == "income" ? "收入" : "支出"), "\(item.occurredOn) · \(item.status)", item.kind == "income" ? item.amountCents : -item.amountCents, "CNY") } }
+        case "债务":
+            if state.debts.isEmpty { empty("没有未偿债务", message: "新增贷款或应付款后，这里会显示还款压力。", icon: "creditcard") }
+            else { ForEach(state.debts) { debt in detailRow(debt.creditor, debt.dueOn.map { "到期 \($0)" } ?? "未设到期日", debt.outstandingCents, "CNY") } }
+        default:
+            Text("金额明细已按账户、流水和债务分开整理。")
+                .font(.subheadline).foregroundStyle(.secondary)
+        }
+    }
+
+    private func detailRow(_ title: String, _ subtitle: String, _ cents: Int, _ currencyCode: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+            Spacer()
+            Text(currency.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0")
+                .font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(cents < 0 ? .red : .primary)
+        }
+        .padding(.vertical, 8)
     }
 }
 

@@ -9,6 +9,9 @@ final class AppState: ObservableObject {
     @Published var dailyFocus: DailyFocus?
     @Published var projects: [ProjectSummary] = []
     @Published var tasks: [FocusTask] = []
+    @Published var accounts: [AccountSummary] = []
+    @Published var transactions: [TransactionSummary] = []
+    @Published var debts: [DebtSummary] = []
     @Published var weeklyPlan: WeeklyPlan?
     @Published var pendingActions: [AssistantAction] = []
     @Published var errorMessage: String?
@@ -40,6 +43,9 @@ final class AppState: ObservableObject {
         dailyFocus = nil
         projects = []
         tasks = []
+        accounts = []
+        transactions = []
+        debts = []
         weeklyPlan = nil
         pendingActions = []
         isAuthenticated = false
@@ -53,6 +59,9 @@ final class AppState: ObservableObject {
             async let focus = api.dailyFocus()
             async let projectList = api.projects()
             async let taskList = api.tasks()
+            async let accountList: [AccountSummary]? = try? await api.accounts()
+            async let transactionList: [TransactionSummary]? = try? await api.transactions()
+            async let debtList: [DebtSummary]? = try? await api.debts()
             async let plan = api.currentWeeklyPlan()
             async let actions = api.pendingActions()
             dashboard = try await summary
@@ -60,6 +69,9 @@ final class AppState: ObservableObject {
             dailyFocus = try await focus
             projects = try await projectList
             tasks = try await taskList
+            accounts = (await accountList) ?? []
+            transactions = (await transactionList) ?? []
+            debts = (await debtList) ?? []
             weeklyPlan = try await plan.item
             pendingActions = try await actions
         } catch let error as APIError {
