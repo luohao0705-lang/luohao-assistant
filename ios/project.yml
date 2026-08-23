@@ -19,9 +19,11 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "iPhone Distribution"
         PROVISIONING_PROFILE_SPECIFIER: "1476c03d-f79b-47e1-b226-40c10281902d"
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Use the microphone to capture spoken tasks and financial updates."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Use speech recognition to turn spoken instructions into text."
-        INFOPLIST_KEY_NSFaceIDUsageDescription: "Use Face ID to unlock your operating data."
-        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "使用麦克风记录你的语音事项和财务更新。"
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "将你的语音转换为文字，交给经营助理处理。"
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "使用面容 ID 解锁你的经营数据。"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
     scheme:
       testTargets: []
