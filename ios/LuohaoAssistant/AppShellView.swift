@@ -25,6 +25,9 @@ struct AppShellView: View {
                 .tag(4)
         }
         .tint(.orange)
+        .background(LuohaoDesign.canvas.ignoresSafeArea())
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarBackground(LuohaoDesign.card, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showingSettings = true } label: {
@@ -91,6 +94,8 @@ struct FinanceView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
             }
+            .scrollIndicators(.hidden)
+            .background(LuohaoDesign.canvas)
             .navigationTitle("财务")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -115,14 +120,22 @@ struct FinanceView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .background(LuohaoDesign.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(LuohaoDesign.hairline, lineWidth: 1)
+        }
     }
 
     private var cashflowMiniChart: some View {
         ChartView(points: state.cashflow)
             .frame(height: 170)
             .padding(12)
-            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+            .background(LuohaoDesign.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(LuohaoDesign.hairline, lineWidth: 1)
+            }
     }
 
     @ViewBuilder private var financeDetail: some View {

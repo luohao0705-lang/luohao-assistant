@@ -316,7 +316,8 @@ struct AssistantView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 8)
-        .background(.ultraThinMaterial)
+        .background(LuohaoDesign.card)
+        .overlay(alignment: .top) { Divider().opacity(0.7) }
     }
 
     private var sendButtonColor: Color { isSending ? .secondary : .orange }
@@ -553,7 +554,7 @@ private struct AssistantMessageBubble: View {
                         .foregroundStyle(.orange)
                 }
             }
-            .frame(maxWidth: 330, alignment: message.role == .user ? .trailing : .leading)
+            .frame(maxWidth: 380, alignment: message.role == .user ? .trailing : .leading)
 
             if message.role == .assistant { Spacer(minLength: 22) }
         }
@@ -641,6 +642,6 @@ private struct AssistantMessageBubble: View {
                 }
             }
         }
-        .frame(maxWidth: 330, alignment: .leading)
+        .frame(maxWidth: 380, alignment: .leading)
     }
 }

@@ -22,10 +22,13 @@ struct DashboardView: View {
                         if !d.riskFlags.isEmpty { riskSection(d.riskFlags) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
                 } else if let error = state.errorMessage { ContentUnavailableView("经营数据暂时无法加载", systemImage: "wifi.exclamationmark", description: Text(error)) } else { ProgressView().padding(.top, 80) }
             }
+            .scrollIndicators(.hidden)
+            .background(LuohaoDesign.canvas)
             .refreshable { await state.refreshDashboard() }
             .navigationTitle("经营驾驶舱")
             .toolbar {
@@ -57,6 +60,7 @@ struct DashboardView: View {
                 .accessibilityLabel("未来 45 天现金余额预测")
             }
         }
+        .surfaceCard(padding: 16)
     }
 
     @ViewBuilder private func hero(_ d: DashboardSummary) -> some View {
@@ -65,7 +69,14 @@ struct DashboardView: View {
             Text("先看现金，再决定行动").font(.subheadline).foregroundStyle(.secondary)
             Text(currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
             Text("当前可用现金 · 预测最低 \(lowestForecast) · \(d.forecastLowestDate)").font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(20).background(Color.orange.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(Color.orange.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        }
     }
 
     private var dailySection: some View {
@@ -84,6 +95,7 @@ struct DashboardView: View {
             } else { Text("还没有排好优先级的事项。告诉 AI 助理你的目标，它会拆解出可执行的下一步。").font(.subheadline).foregroundStyle(.secondary) }
             if let blocked = state.dailyFocus?.blocked, !blocked.isEmpty { Divider(); Label("\(blocked.count) 项被阻塞：\(blocked[0].reason)", systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange) }
         }
+        .surfaceCard(padding: 16)
     }
 
     private func complete(_ task: FocusTask) async {
@@ -101,10 +113,12 @@ struct DashboardView: View {
             }
             if state.projects.isEmpty { Text("还没有项目。用语音说出一个目标，AI 助理会帮你建立项目、路径和任务。").font(.subheadline).foregroundStyle(.secondary) }
         }
+        .surfaceCard(padding: 16)
     }
 
     private var weeklySection: some View {
         VStack(alignment: .leading, spacing: 8) { sectionTitle("本周计划", detail: state.weeklyPlan?.weekStart ?? "尚未安排"); if let plan = state.weeklyPlan { if let theme = plan.theme { Text(theme).font(.headline) }; ForEach(plan.outcomes.prefix(3), id: \.self) { Text("· \($0)").font(.subheadline) } } else { Text("让 AI 助理结合项目、现金风险和阻塞事项，帮你安排本周重点。").font(.subheadline).foregroundStyle(.secondary) } }
+            .surfaceCard(padding: 16)
     }
 
     private var actionSection: some View {
@@ -120,7 +134,7 @@ struct DashboardView: View {
         if value.hasPrefix("Blocked work items requiring owner action: ") { return "有待你处理的阻塞事项：\(value.replacingOccurrences(of: "Blocked work items requiring owner action: ", with: ""))" }
         return value
     }
-    private func sectionTitle(_ title: String, detail: String?) -> some View { HStack { Text(title).font(.title3.weight(.semibold)); Spacer(); if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) } } }
+    private func sectionTitle(_ title: String, detail: String?) -> some View { HStack(alignment: .firstTextBaseline, spacing: 12) { Text(title).font(.headline.weight(.semibold)); Spacer(minLength: 8); if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1) } } }
 }
 
 struct ProjectWarRoom: View {

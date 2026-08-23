@@ -3,64 +3,105 @@ import SwiftUI
 struct LoginView: View {
     @ObservedObject var state: AppState
     @State private var password = ""
+    @FocusState private var passwordFocused: Bool
+
     var body: some View {
-        GeometryReader { proxy in
-            VStack(alignment: .leading, spacing: 0) {
-                Spacer(minLength: 32)
-                VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(.orange)
-                    Text("洛浩经营台")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                    Text("把现金、风险和下一步行动，放在同一个清晰的视角里。")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.bottom, 32)
+        ZStack {
+            LuohaoDesign.canvas.ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("登录你的经营数据")
-                        .font(.headline)
-                    SecureField("请输入访问密码", text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-                        .submitLabel(.go)
-                        .onSubmit { signIn() }
-                    Button(action: signIn) {
-                        HStack {
-                            Spacer()
-                            if state.isLoading { ProgressView().tint(.white) }
-                            else { Text("进入经营台").fontWeight(.semibold) }
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                    .controlSize(.large)
-                    .disabled(password.count < 8 || state.isLoading)
-                    if let error = state.errorMessage {
-                        Text(error).font(.footnote).foregroundStyle(.red)
-                    }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    brandHeader
+                    loginForm
+                    privacyNote
                 }
-                .padding(20)
-                .background(.background, in: RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.06), radius: 16, y: 6)
-
-                Spacer(minLength: 32)
-                Text("数据仅供本人使用 · AI 的写入操作需要你的确认")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .frame(maxWidth: 520, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 22)
+                .padding(.top, 34)
+                .padding(.bottom, 28)
             }
-            .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .topLeading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .scrollIndicators(.hidden)
         }
+        .onTapGesture { passwordFocused = false }
+    }
+
+    private var brandHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.and.chart.xyaxis")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 44, height: 44)
+                    .background(LuohaoDesign.accentTint, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                Text("经营助理")
+                    .font(.headline.weight(.semibold))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("先看清现金，\n再决定下一步。")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text("把现金、风险和事项放在同一个清晰的经营视角里。")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var loginForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("进入你的经营数据")
+                    .font(.title3.weight(.semibold))
+                Text("数据只属于你，AI 的写入操作需要你的确认。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            SecureField("访问密码", text: $password)
+                .font(.body)
+                .textContentType(.password)
+                .submitLabel(.go)
+                .focused($passwordFocused)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 48)
+                .background(LuohaoDesign.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(passwordFocused ? Color.orange.opacity(0.8) : LuohaoDesign.hairline, lineWidth: passwordFocused ? 1.5 : 1)
+                }
+                .onSubmit { signIn() }
+
+            Button(action: signIn) {
+                PrimaryActionLabel(title: "进入经营台", systemImage: "arrow.right", isLoading: state.isLoading)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+            .controlSize(.large)
+            .disabled(password.count < 8 || state.isLoading)
+
+            if let error = state.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .surfaceCard(padding: 20, radius: 18)
+    }
+
+    private var privacyNote: some View {
+        Label("仅限本人使用 · 所有写入都需要确认", systemImage: "lock.shield")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func signIn() {
         guard password.count >= 8 else { return }
+        passwordFocused = false
         Task { await state.login(password: password) }
     }
 }
