@@ -63,6 +63,26 @@ struct DebtSummary: Decodable, Identifiable {
     enum CodingKeys: String, CodingKey { case id, creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case status, note }
 }
 
+struct TransactionCreateRequest: Encodable {
+    let kind: String
+    let amountCents: Int
+    let occurredOn: String
+    let status: String
+    let counterparty: String?
+    let note: String?
+    enum CodingKeys: String, CodingKey { case kind; case amountCents = "amount_cents"; case occurredOn = "occurred_on"; case status, counterparty, note }
+}
+
+struct DebtCreateRequest: Encodable {
+    let creditor: String
+    let principalCents: Int
+    let outstandingCents: Int
+    let dueOn: String?
+    let interestRate: Double?
+    let note: String?
+    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case note }
+}
+
 struct AssistantCommandResponse: Decodable {
     let reply: String
     let snapshot: DashboardSummary
@@ -192,6 +212,8 @@ final class APIClient {
     func accounts() async throws -> [AccountSummary] { let response: AccountListResponse = try await authorized(path: "finance/accounts"); return response.items }
     func transactions() async throws -> [TransactionSummary] { let response: TransactionListResponse = try await authorized(path: "finance/transactions"); return response.items }
     func debts() async throws -> [DebtSummary] { let response: DebtListResponse = try await authorized(path: "finance/debts"); return response.items }
+    func createTransaction(_ payload: TransactionCreateRequest) async throws { try await post(path: "finance/transactions", payload: payload) }
+    func createDebt(_ payload: DebtCreateRequest) async throws { try await post(path: "finance/debts", payload: payload) }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
     func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
@@ -212,6 +234,14 @@ final class APIClient {
         let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(AssistantCommandResponse.self, from: data)
     }
     private func authorized<T: Decodable>(path: String) async throws -> T { let (data, response) = try await perform(authorizedRequest(path: path)); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(T.self, from: data) }
+    private func post<T: Encodable>(path: String, payload: T) async throws {
+        var request = try authorizedRequest(path: path)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (_, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+    }
     private func authorizedAction(path: String, method: String) async throws -> ActionResponse { var request = try authorizedRequest(path: path); request.httpMethod = method; let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }; return try JSONDecoder().decode(ActionResponse.self, from: data) }
     private func authorizedRequest(path: String) throws -> URLRequest {
         let url: URL

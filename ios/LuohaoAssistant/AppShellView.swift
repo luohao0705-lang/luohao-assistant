@@ -40,6 +40,7 @@ struct AppShellView: View {
 struct FinanceView: View {
     @ObservedObject var state: AppState
     @State private var section = "概览"
+    @State private var showingEntry = false
     private let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -82,6 +83,13 @@ struct FinanceView: View {
                 .padding(16)
             }
             .navigationTitle("财务")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingEntry = true } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("新增财务记录")
+                }
+            }
+            .sheet(isPresented: $showingEntry) { FinanceEntryView(state: state) }
         }
     }
 
@@ -129,6 +137,81 @@ struct FinanceView: View {
         }
         .padding(.vertical, 8)
     }
+}
+
+struct FinanceEntryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var state: AppState
+    @State private var kind = "expense"
+    @State private var creditor = ""
+    @State private var amount = ""
+    @State private var counterparty = ""
+    @State private var note = ""
+    @State private var dueOn = ""
+    @State private var entryType = "收支"
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("记录类型", selection: $entryType) {
+                    Text("收入/支出").tag("收支")
+                    Text("债务").tag("债务")
+                }
+                .pickerStyle(.segmented)
+                if entryType == "收支" {
+                    Picker("方向", selection: $kind) { Text("支出").tag("expense"); Text("收入").tag("income") }
+                    TextField("金额（元）", text: $amount).keyboardType(.decimalPad)
+                    TextField("对方或用途（可选）", text: $counterparty)
+                    TextField("备注（可选）", text: $note, axis: .vertical)
+                } else {
+                    TextField("债权人", text: $creditor)
+                    TextField("本金（元）", text: $amount).keyboardType(.decimalPad)
+                    TextField("未偿余额（元）", text: $counterparty).keyboardType(.decimalPad)
+                    TextField("到期日 YYYY-MM-DD（可选）", text: $dueOn)
+                    TextField("备注（可选）", text: $note, axis: .vertical)
+                }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Section {
+                    Button { save() } label: {
+                        HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存记录").fontWeight(.semibold) }; Spacer() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+            .navigationTitle("新增财务记录")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+
+    private func save() {
+        guard let value = Double(amount), value > 0 else { errorMessage = "请输入有效金额"; return }
+        isSaving = true
+        errorMessage = nil
+        Task {
+            do {
+                if entryType == "收支" {
+                    try await state.api.createTransaction(TransactionCreateRequest(kind: kind, amountCents: Int(value * 100), occurredOn: today(), status: "confirmed", counterparty: counterparty.isEmpty ? nil : counterparty, note: note.isEmpty ? nil : note))
+                } else {
+                    guard !creditor.isEmpty else { throw EntryError.message("请输入债权人") }
+                    let outstanding = Double(counterparty) ?? value
+                    try await state.api.createDebt(DebtCreateRequest(creditor: creditor, principalCents: Int(value * 100), outstandingCents: Int(outstanding * 100), dueOn: dueOn.isEmpty ? nil : dueOn, interestRate: nil, note: note.isEmpty ? nil : note))
+                }
+                await state.refreshDashboard()
+                dismiss()
+            } catch { errorMessage = error.localizedDescription; isSaving = false }
+        }
+    }
+
+    private func today() -> String {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; return formatter.string(from: Date())
+    }
+}
+
+private enum EntryError: LocalizedError {
+    case message(String)
+    var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
 }
 
 struct TasksView: View {
