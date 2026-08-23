@@ -112,11 +112,16 @@ final class AppState: ObservableObject {
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func resolveAction(_ action: AssistantAction, confirm: Bool) async {
+    @discardableResult
+    func resolveAction(_ action: AssistantAction, confirm: Bool) async -> Bool {
         do {
             if confirm { try await api.confirmAction(action.id) } else { try await api.cancelAction(action.id) }
             pendingActions.removeAll { $0.id == action.id }
             await refreshDashboard()
-        } catch { errorMessage = error.localizedDescription }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        return false
     }
 }

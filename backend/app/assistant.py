@@ -124,9 +124,14 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
     memory_context = [item.content for item in db.scalars(memory_query).all()]
     if not settings.deepseek_api_key:
         return {"reply": "DeepSeek 尚未配置，经营总览和今日重点仍可正常使用。", "snapshot": snapshot, "tool_results": [], "suggestions": []}
+    pending = db.scalars(select(AssistantAction).where(AssistantAction.status == "pending").order_by(AssistantAction.id.desc()).limit(5)).all()
+    pending_context = [
+        {"id": item.id, "action_type": item.action_type, "payload": json.loads(item.payload_json)}
+        for item in pending
+    ]
     messages = [
-        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。所有写入必须先生成待确认方案，未经确认不能声称已经写入。用户要求拆解事项、创建项目方案或准备周计划时，使用对应规划工具。请始终使用简洁、自然的中文回答。当你需要用户选择或补充信息时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。"},
-        {"role": "system", "content": json.dumps({"dashboard": snapshot, "daily_focus": daily_focus, "memories": memory_context}, ensure_ascii=False)},
+        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
+        {"role": "system", "content": json.dumps({"dashboard": snapshot, "daily_focus": daily_focus, "memories": memory_context, "pending_actions": pending_context}, ensure_ascii=False)},
     ]
     # The API is stateless, so the iOS client sends a bounded recent transcript.
     # Keep only valid roles and cap characters to prevent a long chat from crowding out financial context.

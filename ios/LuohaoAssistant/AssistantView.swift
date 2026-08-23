@@ -206,7 +206,10 @@ struct AssistantView: View {
                             .tint(.orange)
                         }
                         Button("修改方案") {
-                            send(promptOverride: "我想修改这份方案，请先问我需要调整哪些内容。")
+                            Task {
+                                _ = await state.resolveAction(action, confirm: false)
+                                send(promptOverride: "我想修改刚才的方案，请基于原方案直接给我一版修订后的待确认方案。")
+                            }
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
@@ -317,6 +320,26 @@ struct AssistantView: View {
         messages.append(AssistantMessage(role: .user, text: prompt))
         isSending = true
 
+        if isExplicitConfirmation(prompt) {
+            if let action = state.pendingActions.first, state.pendingActions.count == 1 {
+                requestTask = Task {
+                    let confirmed = await state.resolveAction(action, confirm: true)
+                    guard !Task.isCancelled else { return }
+                    messages.append(AssistantMessage(role: .assistant, text: confirmed
+                        ? "已确认，方案已正式写入。后续结果已经同步到总览。"
+                        : "确认没有完成，请检查网络或重试。"))
+                    isSending = false
+                    requestTask = nil
+                }
+            } else {
+                messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
+                    ? "目前没有等待确认的方案。"
+                    : "当前有多份待确认方案，请点击对应方案的“确认执行”，避免误执行。"))
+                isSending = false
+            }
+            return
+        }
+
         requestTask = Task {
             do {
                 let response = try await state.api.command(prompt, mode: mode, history: history)
@@ -340,6 +363,20 @@ struct AssistantView: View {
     private func retry() {
         guard !lastPrompt.isEmpty, !isSending else { return }
         send(promptOverride: lastPrompt)
+    }
+
+    private func isExplicitConfirmation(_ value: String) -> Bool {
+        let normalized = value
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "，", with: "")
+            .replacingOccurrences(of: "。", with: "")
+            .replacingOccurrences(of: "！", with: "")
+            .replacingOccurrences(of: "!", with: "")
+        return [
+            "ok", "okay", "确认", "确认执行", "可以执行", "同意", "没问题",
+            "就这样", "按这个执行", "按方案执行", "好的", "可以"
+        ].contains(normalized)
     }
 
     private func conversationHistory() -> [[String: String]] {
