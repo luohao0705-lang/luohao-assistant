@@ -25,3 +25,6 @@ Within 30 seconds, the founder can identify the most urgent cash or execution ri
 ## 6. Learned constraints
 - 2026-08-23: Use a dense, calm operating view with one orange attention accent. The user needs executive clarity, not a generic task manager.
 - 2026-08-23: Voice is the preferred capture path; typing remains an accessible fallback.
+- 2026-08-24: The assistant tab is the first navigation destination. Chat history must show the founder's messages and the assistant's replies as distinct, readable bubbles; a single replaceable reply string is not acceptable.
+- 2026-08-24: Product UI copy is Simplified Chinese. The assistant surface should feel like a focused operating desk with a pinned composer, visible status, and restrained detail rather than a generic chat screen.
+- 2026-08-24: When the assistant asks for a choice or confirmation, provide concise tappable options while keeping free-form voice and text input available.

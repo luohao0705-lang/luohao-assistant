@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, timedelta
 
 import httpx
@@ -111,7 +112,7 @@ def execute_tool(name: str, arguments: dict, db: Session) -> dict:
     return {"error": f"unsupported tool: {name}"}
 
 
-async def run_assistant(text: str, mode: str, db: Session) -> dict:
+async def run_assistant(text: str, mode: str, db: Session, history: list[dict] | None = None) -> dict:
     settings = get_settings()
     snapshot = dashboard_snapshot(db)
     daily_focus = daily_focus_snapshot(db)
@@ -122,12 +123,26 @@ async def run_assistant(text: str, mode: str, db: Session) -> dict:
         memory_query = select(Memory).where(Memory.memory_type != "archived", or_(*(Memory.content.ilike(f"%{term}%") for term in terms))).order_by(Memory.id.desc()).limit(10)
     memory_context = [item.content for item in db.scalars(memory_query).all()]
     if not settings.deepseek_api_key:
-        return {"reply": "DeepSeek 尚未配置，经营总览和今日重点仍可正常使用。", "snapshot": snapshot, "tool_results": []}
+        return {"reply": "DeepSeek 尚未配置，经营总览和今日重点仍可正常使用。", "snapshot": snapshot, "tool_results": [], "suggestions": []}
     messages = [
-        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。所有写入必须先生成待确认方案，未经确认不能声称已经写入。用户要求拆解事项、创建项目方案或准备周计划时，使用对应规划工具。请始终使用简洁、自然的中文回答。"},
+        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。所有写入必须先生成待确认方案，未经确认不能声称已经写入。用户要求拆解事项、创建项目方案或准备周计划时，使用对应规划工具。请始终使用简洁、自然的中文回答。当你需要用户选择或补充信息时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。"},
         {"role": "system", "content": json.dumps({"dashboard": snapshot, "daily_focus": daily_focus, "memories": memory_context}, ensure_ascii=False)},
-        {"role": "user", "content": text},
     ]
+    # The API is stateless, so the iOS client sends a bounded recent transcript.
+    # Keep only valid roles and cap characters to prevent a long chat from crowding out financial context.
+    history_messages: list[dict] = []
+    history_chars = 0
+    for item in reversed(history or []):
+        role = item.get("role")
+        content = str(item.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        if history_chars + len(content) > 12000:
+            break
+        history_messages.insert(0, {"role": role, "content": content})
+        history_chars += len(content)
+    messages.extend(history_messages)
+    messages.append({"role": "user", "content": text})
     payload = {"model": settings.deepseek_reasoner_model if mode == "plan" else settings.deepseek_chat_model, "messages": messages, "tools": TOOLS, "tool_choice": "auto"}
     tool_results = []
     headers = {"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}
@@ -149,5 +164,25 @@ async def run_assistant(text: str, mode: str, db: Session) -> dict:
                 final_response.raise_for_status()
                 message = final_response.json()["choices"][0]["message"]
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
-        return {"reply": "AI 服务暂时不可用，经营数据仍可继续查看。", "snapshot": snapshot, "tool_results": [], "error": str(exc)}
-    return {"reply": message.get("content") or "分析完成。", "snapshot": dashboard_snapshot(db), "tool_results": tool_results}
+        return {"reply": "AI 服务暂时不可用，经营数据仍可继续查看。", "snapshot": snapshot, "tool_results": [], "suggestions": [], "error": str(exc)}
+    reply, suggestions = _extract_suggestions(message.get("content") or "分析完成。")
+    return {"reply": reply, "snapshot": dashboard_snapshot(db), "tool_results": tool_results, "suggestions": suggestions}
+
+
+def _extract_suggestions(content: str) -> tuple[str, list[str]]:
+    """Keep the model protocol human-readable while exposing choices to the app."""
+    lines = content.splitlines()
+    suggestions: list[str] = []
+    kept: list[str] = []
+    for line in lines:
+        match = re.match(r"^\s*(?:QUICK_OPTIONS|快捷选项)\s*[:：]\s*(.+?)\s*$", line, re.IGNORECASE)
+        if not match:
+            kept.append(line)
+            continue
+        for value in re.split(r"\s*[|｜]\s*", match.group(1)):
+            value = value.strip(" \t·•-")
+            if value and value not in suggestions:
+                suggestions.append(value)
+        if len(suggestions) >= 4:
+            suggestions = suggestions[:4]
+    return "\n".join(kept).strip(), suggestions

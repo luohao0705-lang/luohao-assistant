@@ -8,20 +8,20 @@ struct AppShellView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            DashboardView(state: state)
-                .tabItem { Label("总览", systemImage: "square.grid.2x2") }
-                .tag(0)
-            FinanceView(state: state)
-                .tabItem { Label("财务", systemImage: "yensign.circle") }
-                .tag(1)
-            TasksView(state: state)
-                .tabItem { Label("事项", systemImage: "checklist") }
-                .tag(2)
-            ProjectsView(state: state)
-                .tabItem { Label("项目", systemImage: "rectangle.3.group") }
-                .tag(3)
             AssistantView(state: state)
                 .tabItem { Label("助理", systemImage: "waveform") }
+                .tag(0)
+            DashboardView(state: state)
+                .tabItem { Label("总览", systemImage: "square.grid.2x2") }
+                .tag(1)
+            FinanceView(state: state)
+                .tabItem { Label("财务", systemImage: "yensign.circle") }
+                .tag(2)
+            TasksView(state: state)
+                .tabItem { Label("事项", systemImage: "checklist") }
+                .tag(3)
+            ProjectsView(state: state)
+                .tabItem { Label("项目", systemImage: "rectangle.3.group") }
                 .tag(4)
         }
         .tint(.orange)

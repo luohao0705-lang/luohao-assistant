@@ -456,4 +456,5 @@ def cancel_action(action_id: int, _: str = Depends(require_auth), db: Session = 
 
 @app.post("/assistant/command")
 async def assistant_command(payload: AssistantCommand, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
-    return await run_assistant(payload.text, payload.mode, db)
+    history = [item.model_dump() for item in payload.history]
+    return await run_assistant(payload.text, payload.mode, db, history)

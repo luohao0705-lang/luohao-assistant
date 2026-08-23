@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -137,6 +139,12 @@ class WeeklyPlanCreate(BaseModel):
 class AssistantCommand(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     mode: str = Field(default="chat", pattern="^(chat|plan|execute)$")
+    history: list["AssistantHistoryItem"] = Field(default_factory=list, max_length=20)
+
+
+class AssistantHistoryItem(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=8000)
 
 
 class MemoryCreate(BaseModel):

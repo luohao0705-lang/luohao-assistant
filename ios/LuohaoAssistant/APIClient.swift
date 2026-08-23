@@ -154,7 +154,17 @@ struct AssistantCommandResponse: Decodable {
     let reply: String
     let snapshot: DashboardSummary
     let toolResults: [[String: JSONValue]]
-    enum CodingKeys: String, CodingKey { case reply, snapshot; case toolResults = "tool_results" }
+    let suggestions: [String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reply = try container.decode(String.self, forKey: .reply)
+        snapshot = try container.decode(DashboardSummary.self, forKey: .snapshot)
+        toolResults = try container.decodeIfPresent([[String: JSONValue]].self, forKey: .toolResults) ?? []
+        suggestions = try container.decodeIfPresent([String].self, forKey: .suggestions) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey { case reply, snapshot, suggestions; case toolResults = "tool_results" }
 }
 
 struct DailyFocus: Decodable {
@@ -369,8 +379,9 @@ final class APIClient {
         let (data, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }
     }
-    func command(_ text: String, mode: String = "chat") async throws -> AssistantCommandResponse {
-        var request = try authorizedRequest(path: "assistant/command"); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type"); request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "mode": mode])
+    func command(_ text: String, mode: String = "chat", history: [[String: String]] = []) async throws -> AssistantCommandResponse {
+        var request = try authorizedRequest(path: "assistant/command"); request.httpMethod = "POST"; request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text, "mode": mode, "history": history])
         let (data, response) = try await perform(request); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }; return try JSONDecoder().decode(AssistantCommandResponse.self, from: data)
     }
     private func authorized<T: Decodable>(path: String) async throws -> T { let (data, response) = try await perform(authorizedRequest(path: path)); guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response, data: data) }; return try JSONDecoder().decode(T.self, from: data) }
