@@ -19,6 +19,13 @@ From `deploy/`, copy `.env.example` to `.env` and replace every placeholder:
 
 Keep `.env` mode `0600`. Do not paste the secret file into support chats.
 
+Generate the password hash locally before copying it into `.env`:
+
+```sh
+cd backend
+python scripts/hash_password.py
+```
+
 ## Start and verify
 
 ```sh
@@ -37,6 +44,8 @@ After the health checks pass, run the public API verifier:
 ```sh
 sh /srv/luohao-assistant/deploy/verify.sh https://luo.hsh6.com
 ```
+
+For subsequent code updates, run `sh /srv/luohao-assistant/deploy/update.sh` from the checkout.
 
 ## Backup
 
