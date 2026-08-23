@@ -31,12 +31,32 @@ class TransactionCreate(BaseModel):
     note: str | None = None
 
 
+class TransactionUpdate(BaseModel):
+    kind: str | None = Field(default=None, pattern="^(income|expense)$")
+    amount_cents: int | None = Field(default=None, gt=0)
+    occurred_on: date | None = None
+    expected_on: date | None = None
+    status: str | None = Field(default=None, pattern="^(planned|confirmed|paid|overdue|cancelled)$")
+    counterparty: str | None = Field(default=None, max_length=160)
+    note: str | None = None
+
+
 class DebtCreate(BaseModel):
     creditor: str = Field(min_length=1, max_length=160)
     principal_cents: int = Field(gt=0)
     outstanding_cents: int = Field(ge=0)
     due_on: date | None = None
     interest_rate: float | None = Field(default=None, ge=0)
+    note: str | None = None
+
+
+class DebtUpdate(BaseModel):
+    creditor: str | None = Field(default=None, min_length=1, max_length=160)
+    principal_cents: int | None = Field(default=None, gt=0)
+    outstanding_cents: int | None = Field(default=None, ge=0)
+    due_on: date | None = None
+    interest_rate: float | None = Field(default=None, ge=0)
+    status: str | None = Field(default=None, pattern="^(open|paid|overdue|cancelled)$")
     note: str | None = None
 
 

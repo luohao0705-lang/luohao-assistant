@@ -10,7 +10,7 @@ from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapsh
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Account, AssistantAction, DecisionRecord, Debt, EventLog, Memory, Project, Task, TaskDependency, Transaction, WeeklyPlan
-from .schemas import AccountCreate, ActionResponse, AssistantCommand, DebtCreate, DecisionCreate, IdResponse, LoginRequest, MemoryCreate, ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate, TokenResponse, TransactionCreate, WeeklyPlanCreate
+from .schemas import AccountCreate, ActionResponse, AssistantCommand, DebtCreate, DebtUpdate, DecisionCreate, IdResponse, LoginRequest, MemoryCreate, ProjectCreate, ProjectUpdate, TaskCreate, TaskUpdate, TokenResponse, TransactionCreate, TransactionUpdate, WeeklyPlanCreate
 from .security import create_access_token, require_auth, verify_password
 
 settings = get_settings()
@@ -197,6 +197,18 @@ def create_transaction(payload: TransactionCreate, _: str = Depends(require_auth
     return IdResponse(id=item.id)
 
 
+@app.patch("/finance/transactions/{transaction_id}", response_model=IdResponse)
+def update_transaction(transaction_id: int, payload: TransactionUpdate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
+    item = db.get(Transaction, transaction_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="transaction not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, key, value)
+    db.add(EventLog(event_type="transaction.updated", payload_json=payload.model_dump_json()))
+    db.commit()
+    return IdResponse(id=item.id)
+
+
 @app.post("/finance/debts", response_model=IdResponse)
 def create_debt(payload: DebtCreate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
     item = Debt(**payload.model_dump())
@@ -204,6 +216,18 @@ def create_debt(payload: DebtCreate, _: str = Depends(require_auth), db: Session
     db.add(EventLog(event_type="debt.created", payload_json=payload.model_dump_json()))
     db.commit()
     db.refresh(item)
+    return IdResponse(id=item.id)
+
+
+@app.patch("/finance/debts/{debt_id}", response_model=IdResponse)
+def update_debt(debt_id: int, payload: DebtUpdate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
+    item = db.get(Debt, debt_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="debt not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, key, value)
+    db.add(EventLog(event_type="debt.updated", payload_json=payload.model_dump_json()))
+    db.commit()
     return IdResponse(id=item.id)
 
 
