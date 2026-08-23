@@ -478,7 +478,9 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("安全") {
-                    Label("Face ID 解锁", systemImage: "faceid")
+                    Toggle(isOn: $state.biometricEnabled) {
+                        Label("Face ID 解锁", systemImage: "faceid")
+                    }
                     Button("退出登录", role: .destructive) { state.logout() }
                 }
                 Section("连接") {

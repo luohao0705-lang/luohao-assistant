@@ -18,11 +18,20 @@ final class AppState: ObservableObject {
     @Published var pendingActions: [AssistantAction] = []
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var biometricEnabled: Bool {
+        didSet { UserDefaults.standard.set(biometricEnabled, forKey: "luohao.biometricEnabled") }
+    }
     let api = APIClient.shared
+
+    init() {
+        biometricEnabled = UserDefaults.standard.object(forKey: "luohao.biometricEnabled") as? Bool ?? true
+    }
 
     func restoreSession() async {
         guard api.token != nil else { return }
-        guard await BiometricGate.authenticate() else { return }
+        if biometricEnabled {
+            guard await BiometricGate.authenticate() else { return }
+        }
         isAuthenticated = true
         await refreshDashboard()
     }
