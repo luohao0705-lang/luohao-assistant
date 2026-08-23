@@ -56,10 +56,11 @@ struct DashboardView: View {
     }
 
     @ViewBuilder private func hero(_ d: DashboardSummary) -> some View {
+        let lowestForecast = currency.string(from: NSNumber(value: Double(d.forecastLowestBalanceCents) / 100)) ?? "-"
         VStack(alignment: .leading, spacing: 6) {
             Text("Cash first, then action").font(.subheadline).foregroundStyle(.secondary)
             Text(currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
-            Text("Available cash | lowest forecast \(currency.string(from: NSNumber(value: Double(d.forecastLowestBalanceCents) / 100)) ?? \"-\") | \(d.forecastLowestDate)").font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
+            Text("Available cash | lowest forecast \(lowestForecast) | \(d.forecastLowestDate)").font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(20).background(Color.orange.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
     }
 

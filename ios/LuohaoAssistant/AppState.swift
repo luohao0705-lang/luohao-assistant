@@ -56,7 +56,7 @@ final class AppState: ObservableObject {
             cashflow = try await cashflowPoints
             dailyFocus = try await focus
             projects = try await projectList
-            weeklyPlan = try await plan
+            weeklyPlan = try await plan.item
             pendingActions = try await actions
         } catch let error as APIError {
             if case .unauthorized = error {
