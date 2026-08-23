@@ -131,6 +131,7 @@ struct ProjectWarRoom: View {
 
 struct WeeklyPlanView: View {
     @ObservedObject var state: AppState
+    @State private var showingEditor = false
     var body: some View {
         NavigationStack {
             List {
@@ -162,6 +163,70 @@ struct WeeklyPlanView: View {
                 }
             }
             .navigationTitle("本周计划")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showingEditor = true } label: { Image(systemName: "pencil") }.accessibilityLabel("编辑本周计划") } }
+            .sheet(isPresented: $showingEditor) { WeeklyPlanEditorView(state: state) }
         }
+    }
+}
+
+private struct WeeklyPlanEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var state: AppState
+    @State private var theme: String
+    @State private var outcomes: String
+    @State private var priorities: String
+    @State private var risks: String
+    @State private var reviewNotes: String
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(state: AppState) {
+        self.state = state
+        _theme = State(initialValue: state.weeklyPlan?.theme ?? "")
+        _outcomes = State(initialValue: state.weeklyPlan?.outcomes.joined(separator: "\n") ?? "")
+        _priorities = State(initialValue: state.weeklyPlan?.priorities.joined(separator: "\n") ?? "")
+        _risks = State(initialValue: state.weeklyPlan?.risks.joined(separator: "\n") ?? "")
+        _reviewNotes = State(initialValue: state.weeklyPlan?.reviewNotes ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("本周主题", text: $theme)
+                TextField("目标结果（每行一项）", text: $outcomes, axis: .vertical).lineLimit(3...8)
+                TextField("优先事项（每行一项）", text: $priorities, axis: .vertical).lineLimit(3...8)
+                TextField("风险提醒（每行一项）", text: $risks, axis: .vertical).lineLimit(3...8)
+                TextField("复盘备注", text: $reviewNotes, axis: .vertical).lineLimit(2...6)
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button { save() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("保存计划").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
+            }
+            .navigationTitle("编辑本周计划")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+
+    private func save() {
+        let outcomeItems = lines(outcomes)
+        let priorityItems = lines(priorities)
+        guard !outcomeItems.isEmpty, !priorityItems.isEmpty else { errorMessage = "至少填写一项目标结果和一项优先事项"; return }
+        isSaving = true; errorMessage = nil
+        Task {
+            do {
+                try await state.api.saveWeeklyPlan(WeeklyPlanCreateRequest(weekStart: weekStart(), theme: theme.isEmpty ? nil : theme, outcomes: Array(outcomeItems.prefix(5)), priorities: Array(priorityItems.prefix(8)), risks: Array(lines(risks).prefix(8)), reviewNotes: reviewNotes.isEmpty ? nil : reviewNotes))
+                await state.refreshDashboard(); dismiss()
+            } catch { errorMessage = error.localizedDescription; isSaving = false }
+        }
+    }
+
+    private func lines(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    private func weekStart() -> String {
+        let calendar = Calendar(identifier: .gregorian)
+        let weekday = calendar.component(.weekday, from: Date())
+        let daysFromMonday = (weekday + 5) % 7
+        let date = calendar.date(byAdding: .day, value: -daysFromMonday, to: Date()) ?? Date()
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; return formatter.string(from: date)
     }
 }

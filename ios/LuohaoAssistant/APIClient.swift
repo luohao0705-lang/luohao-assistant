@@ -250,6 +250,16 @@ struct WeeklyPlan: Decodable {
 
 struct WeeklyPlanResponse: Decodable { let item: WeeklyPlan?; let weekStart: String; enum CodingKeys: String, CodingKey { case item; case weekStart = "week_start" } }
 
+struct WeeklyPlanCreateRequest: Encodable {
+    let weekStart: String
+    let theme: String?
+    let outcomes: [String]
+    let priorities: [String]
+    let risks: [String]
+    let reviewNotes: String?
+    enum CodingKeys: String, CodingKey { case weekStart = "week_start"; case theme, outcomes, priorities, risks; case reviewNotes = "review_notes" }
+}
+
 struct AssistantAction: Decodable, Identifiable {
     let id: Int
     let actionType: String
@@ -342,6 +352,7 @@ final class APIClient {
     func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
     func createTask(_ payload: TaskCreateRequest) async throws { try await post(path: "tasks", payload: payload) }
     func currentWeeklyPlan() async throws -> WeeklyPlanResponse { try await authorized(path: "weekly-plans/current") }
+    func saveWeeklyPlan(_ payload: WeeklyPlanCreateRequest) async throws { try await post(path: "weekly-plans", payload: payload) }
     func pendingActions() async throws -> [AssistantAction] { let response: ActionListResponse = try await authorized(path: "assistant/actions"); return response.items.filter { $0.status == "pending" } }
     func confirmAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/confirm", method: "POST") }
     func cancelAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/cancel", method: "POST") }
