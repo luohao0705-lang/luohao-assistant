@@ -1,0 +1,27 @@
+name: iOS simulator build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: cd ios && xcodegen generate
+      - name: Build simulator app
+        run: |
+          xcodebuild build \
+            -project ios/LuohaoAssistant.xcodeproj \
+            -scheme LuohaoAssistant \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
