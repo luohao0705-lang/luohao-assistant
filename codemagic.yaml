@@ -25,10 +25,37 @@ workflows:
       - name: Build IPA
         script: |
           set -o pipefail
+          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/LuohaoAssistant.xcarchive"
+          EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
+          LOG_PATH="$CM_BUILD_DIR/build/ios/logs/build-ipa.log"
           mkdir -p "$CM_BUILD_DIR/build/ios/logs"
-          xcode-project build-ipa \
-            --project ios/LuohaoAssistant.xcodeproj \
-            --scheme LuohaoAssistant 2>&1 | tee "$CM_BUILD_DIR/build/ios/logs/build-ipa.log"
+          xcodebuild archive \
+            -project ios/LuohaoAssistant.xcodeproj \
+            -scheme LuohaoAssistant \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEVELOPMENT_TEAM=E6B2H6W823 \
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="1476c03d-f79b-47e1-b226-40c10281902d" 2>&1 | tee "$LOG_PATH"
+          cat > "$CM_BUILD_DIR/build/ios/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>E6B2H6W823</string>
+            <key>provisioningProfiles</key><dict>
+              <key>app.ocelot3040.maroon4586</key><string>00008110-00012CAE1EF8401EVS9MD8</string>
+            </dict>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist "$CM_BUILD_DIR/build/ios/ExportOptions.plist" 2>&1 | tee -a "$LOG_PATH"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/**/*.log
