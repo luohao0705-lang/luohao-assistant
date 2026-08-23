@@ -328,8 +328,10 @@ struct AssistantView: View {
         isSending = true
 
         if isExplicitConfirmation(prompt) {
-            if let action = state.pendingActions.first, state.pendingActions.count == 1 {
-                requestTask = Task {
+            requestTask = Task {
+                await state.refreshPendingActions()
+                guard !Task.isCancelled else { return }
+                if let action = state.pendingActions.first, state.pendingActions.count == 1 {
                     let confirmed = await state.resolveAction(action, confirm: true)
                     guard !Task.isCancelled else { return }
                     messages.append(AssistantMessage(role: .assistant, text: confirmed
@@ -337,25 +339,13 @@ struct AssistantView: View {
                         : "确认没有完成，请检查网络或重试。"))
                     isSending = false
                     requestTask = nil
+                } else {
+                    messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
+                        ? "目前没有等待确认的方案。"
+                        : "当前有多份待确认方案，请点击对应方案的确认按钮，避免误执行。"))
                 }
-            } else {
-                requestTask = Task {
-                    await state.refreshPendingActions()
-                    guard !Task.isCancelled else { return }
-                    if let action = state.pendingActions.first, state.pendingActions.count == 1 {
-                        let confirmed = await state.resolveAction(action, confirm: true)
-                        guard !Task.isCancelled else { return }
-                        messages.append(AssistantMessage(role: .assistant, text: confirmed
-                            ? "已确认，方案已正式写入。后续结果已经同步到总览。"
-                            : "确认没有完成，请检查网络或重试。"))
-                    } else {
-                        messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
-                            ? "目前没有等待确认的方案。"
-                            : "当前有多份待确认方案，请点击对应方案的确认按钮，避免误执行。"))
-                    }
-                    isSending = false
-                    requestTask = nil
-                }
+                isSending = false
+                requestTask = nil
             }
             return
         }
