@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -403,8 +404,28 @@ def list_actions(status: str | None = Query(default=None), _: str = Depends(requ
 
 def _confirm_action(action: AssistantAction, db: Session) -> dict:
     payload = json.loads(action.payload_json)
+    if action.action_type == "propose_tasks":
+        # Older assistant versions sometimes misclassified a money entry as a task.
+        # Preserve the user's pending confirmation by converting that legacy payload
+        # into a real transaction instead of silently creating a to-do.
+        descriptions = [str(item.get("description") or item.get("title") or "") for item in payload.get("tasks", [])]
+        legacy_text = " ".join(descriptions)
+        amount_match = re.search(r"(收入|支出|收款|付款)[^0-9]{0,24}(\d+(?:\.\d+)?)\s*元", legacy_text)
+        if amount_match:
+            kind = "income" if amount_match.group(1) in {"收入", "收款"} else "expense"
+            item = Transaction(
+                account_id=None,
+                kind=kind,
+                amount_cents=round(float(amount_match.group(2)) * 100),
+                occurred_on=date.today(),
+                status="confirmed",
+                counterparty=None,
+                note=legacy_text[:2000],
+            )
+            db.add(item)
+            db.flush()
+            return {"transaction_id": item.id, "amount_cents": item.amount_cents, "kind": kind, "legacy_converted": True}
     if action.action_type == "propose_finance_entry":
-        from datetime import date
         kind = payload.get("kind")
         amount_cents = int(payload.get("amount_cents") or 0)
         if kind not in {"income", "expense"} or amount_cents <= 0:
@@ -430,7 +451,6 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
     if action.action_type == "create_project_plan":
         project_fields = {key: payload.get(key) for key in ("name", "objective", "success_criteria", "key_hypothesis", "risk_summary", "next_action", "priority") if payload.get(key) is not None}
         if payload.get("due_on"):
-            from datetime import date
             project_fields["due_on"] = date.fromisoformat(payload["due_on"])
         project = Project(**project_fields)
         db.add(project)
@@ -438,7 +458,6 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
         task_ids = [_create_task(task_data, db, project.id).id for task_data in payload.get("tasks", [])]
         return {"project_id": project.id, "task_ids": task_ids}
     if action.action_type == "create_weekly_plan":
-        from datetime import date
         week_start = date.fromisoformat(payload["week_start"])
         item = db.scalar(select(WeeklyPlan).where(WeeklyPlan.week_start == week_start))
         if not item:
