@@ -133,15 +133,27 @@ struct FinanceView: View {
 
 struct TasksView: View {
     @ObservedObject var state: AppState
+    @State private var filter = "全部"
     var body: some View {
         NavigationStack {
-            List {
-                Section("今天") {
-                    if state.tasks.isEmpty {
+            VStack(spacing: 0) {
+                Picker("事项筛选", selection: $filter) {
+                    Text("全部").tag("全部")
+                    Text("待办").tag("todo")
+                    Text("进行中").tag("in_progress")
+                    Text("阻塞").tag("blocked")
+                    Text("已完成").tag("done")
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                List {
+                    Section("当前事项") {
+                        if filteredTasks.isEmpty {
                         Text("还没有事项。用语音告诉助理今天要推进什么。")
                             .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(state.tasks) { task in
+                        } else {
+                        ForEach(filteredTasks) { task in
                             TaskRow(task: task, state: state)
                         }
                     }
@@ -150,6 +162,10 @@ struct TasksView: View {
             .navigationTitle("事项")
             .refreshable { await state.refreshDashboard() }
         }
+    }
+
+    private var filteredTasks: [FocusTask] {
+        filter == "全部" ? state.tasks : state.tasks.filter { $0.status == filter }
     }
 }
 
