@@ -339,10 +339,23 @@ struct AssistantView: View {
                     requestTask = nil
                 }
             } else {
-                messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
-                    ? "目前没有等待确认的方案。"
-                    : "当前有多份待确认方案，请点击对应方案的“确认执行”，避免误执行。"))
-                isSending = false
+                requestTask = Task {
+                    await state.refreshPendingActions()
+                    guard !Task.isCancelled else { return }
+                    if let action = state.pendingActions.first, state.pendingActions.count == 1 {
+                        let confirmed = await state.resolveAction(action, confirm: true)
+                        guard !Task.isCancelled else { return }
+                        messages.append(AssistantMessage(role: .assistant, text: confirmed
+                            ? "已确认，方案已正式写入。后续结果已经同步到总览。"
+                            : "确认没有完成，请检查网络或重试。"))
+                    } else {
+                        messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
+                            ? "目前没有等待确认的方案。"
+                            : "当前有多份待确认方案，请点击对应方案的确认按钮，避免误执行。"))
+                    }
+                    isSending = false
+                    requestTask = nil
+                }
             }
             return
         }
@@ -381,7 +394,7 @@ struct AssistantView: View {
             .replacingOccurrences(of: "！", with: "")
             .replacingOccurrences(of: "!", with: "")
         return [
-            "ok", "okay", "确认", "确认执行", "可以执行", "同意", "没问题",
+            "ok", "okay", "确认", "确认登记", "确认方案", "确认执行", "可以执行", "同意", "没问题",
             "就这样", "按这个执行", "按方案执行", "好的", "可以"
         ].contains(normalized)
     }
@@ -515,8 +528,13 @@ private struct AssistantMessageBubble: View {
 
                 if !message.toolResults.isEmpty { toolTrace }
 
-                if !message.suggestions.isEmpty, let onSelectOption {
-                    quickOptions(onSelectOption)
+                if let onSelectOption {
+                    let options = message.suggestions.isEmpty && requiresConfirmation
+                        ? confirmationOptions
+                        : message.suggestions
+                    if !options.isEmpty {
+                        quickOptions(options, onSelectOption)
+                    }
                 }
 
                 if let onRetry {
@@ -535,6 +553,21 @@ private struct AssistantMessageBubble: View {
     private var bubbleBackground: Color {
         if message.isError { return Color.red.opacity(0.08) }
         return message.role == .user ? .orange : Color(.secondarySystemBackground)
+    }
+
+    private var requiresConfirmation: Bool {
+        let normalized = message.text.replacingOccurrences(of: " ", with: "")
+        return normalized.contains("确认此方案") ||
+            normalized.contains("请回复“确认") ||
+            normalized.contains("请回复\"确认") ||
+            normalized.contains("确认后，我会立即正式写入")
+    }
+
+    private var confirmationOptions: [String] {
+        let normalized = message.text.replacingOccurrences(of: " ", with: "")
+        let financeTerms = ["收入", "支出", "收款", "付款", "贷款", "债务", "账户", "金额", "元"]
+        let confirmLabel = financeTerms.contains(where: normalized.contains) ? "确认登记" : "确认执行"
+        return [confirmLabel, "修改方案"]
     }
 
     private var assistantMark: some View {
@@ -570,13 +603,13 @@ private struct AssistantMessageBubble: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func quickOptions(_ onSelect: @escaping (String) -> Void) -> some View {
+    private func quickOptions(_ options: [String], _ onSelect: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("可以直接选择")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], alignment: .leading, spacing: 8) {
-                ForEach(message.suggestions, id: \.self) { option in
+                ForEach(options, id: \.self) { option in
                     Button {
                         onSelect(option)
                     } label: {

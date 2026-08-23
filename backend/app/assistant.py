@@ -165,7 +165,14 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         history_chars += len(content)
     messages.extend(history_messages)
     messages.append({"role": "user", "content": text})
-    payload = {"model": settings.deepseek_reasoner_model if mode == "plan" else settings.deepseek_chat_model, "messages": messages, "tools": TOOLS, "tool_choice": "auto"}
+    write_intent_terms = ("登记", "收入", "支出", "收款", "付款", "贷款", "债务", "账户", "创建项目", "拆解", "安排", "规划", "推进", "排期")
+    requires_write = mode == "plan" or any(term in text for term in write_intent_terms)
+    payload = {
+        "model": settings.deepseek_reasoner_model if mode == "plan" else settings.deepseek_chat_model,
+        "messages": messages,
+        "tools": TOOLS,
+        "tool_choice": "required" if requires_write else "auto",
+    }
     tool_results = []
     headers = {"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}
     try:

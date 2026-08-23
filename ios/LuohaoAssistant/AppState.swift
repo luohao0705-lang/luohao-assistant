@@ -112,6 +112,16 @@ final class AppState: ObservableObject {
         } catch { errorMessage = error.localizedDescription }
     }
 
+    /// Refresh only the confirmation queue. This stays usable even when an
+    /// unrelated dashboard endpoint is temporarily unavailable.
+    func refreshPendingActions() async {
+        do {
+            pendingActions = try await api.pendingActions()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     @discardableResult
     func resolveAction(_ action: AssistantAction, confirm: Bool) async -> Bool {
         do {
