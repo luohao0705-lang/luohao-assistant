@@ -451,6 +451,8 @@ struct TasksView: View {
                 }
             }
             }
+            .scrollContentBackground(.hidden)
+            .background(LuohaoDesign.canvas)
             .navigationTitle("事项")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus") }.accessibilityLabel("新建事项") } }
             .sheet(isPresented: $showingCreate) { TaskFormView(state: state) }
@@ -539,6 +541,8 @@ struct ProjectsView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LuohaoDesign.canvas)
             .navigationTitle("项目")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -671,6 +675,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(LuohaoDesign.canvas)
             .navigationTitle("设置")
         }
     }
