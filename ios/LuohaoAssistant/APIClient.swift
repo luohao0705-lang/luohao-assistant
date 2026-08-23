@@ -207,6 +207,35 @@ struct ProjectSummary: Decodable, Identifiable {
     enum CodingKeys: String, CodingKey { case id, name, objective, status, stage, priority; case dueOn = "due_on"; case successCriteria = "success_criteria"; case keyHypothesis = "key_hypothesis"; case riskSummary = "risk_summary"; case blockerSummary = "blocker_summary"; case nextAction = "next_action"; case tasks; case openTaskCount = "open_task_count" }
 }
 
+struct ProjectCreateRequest: Encodable {
+    let name: String
+    let objective: String?
+    let priority: Int
+    let dueOn: String?
+    let stage: String
+    let successCriteria: String?
+    let keyHypothesis: String?
+    let riskSummary: String?
+    let blockerSummary: String?
+    let nextAction: String?
+    enum CodingKeys: String, CodingKey { case name, objective, priority; case dueOn = "due_on"; case stage; case successCriteria = "success_criteria"; case keyHypothesis = "key_hypothesis"; case riskSummary = "risk_summary"; case blockerSummary = "blocker_summary"; case nextAction = "next_action" }
+}
+
+struct ProjectUpdateRequest: Encodable {
+    let name: String?
+    let objective: String?
+    let status: String?
+    let priority: Int?
+    let dueOn: String?
+    let stage: String?
+    let successCriteria: String?
+    let keyHypothesis: String?
+    let riskSummary: String?
+    let blockerSummary: String?
+    let nextAction: String?
+    enum CodingKeys: String, CodingKey { case name, objective, status, priority; case dueOn = "due_on"; case stage; case successCriteria = "success_criteria"; case keyHypothesis = "key_hypothesis"; case riskSummary = "risk_summary"; case blockerSummary = "blocker_summary"; case nextAction = "next_action" }
+}
+
 struct WeeklyPlan: Decodable {
     let id: Int
     let weekStart: String
@@ -248,6 +277,18 @@ struct TaskUpdateRequest: Encodable {
         try container.encodeIfPresent(urgency, forKey: .urgency)
         try container.encodeIfPresent(blockedReason, forKey: .blockedReason)
     }
+}
+
+struct TaskCreateRequest: Encodable {
+    let title: String
+    let description: String?
+    let projectId: Int?
+    let priority: Int
+    let dueOn: String?
+    let impact: Int
+    let urgency: Int
+    let estimatedMinutes: Int?
+    enum CodingKeys: String, CodingKey { case title, description; case projectId = "project_id"; case priority; case dueOn = "due_on"; case impact, urgency; case estimatedMinutes = "estimated_minutes" }
 }
 
 enum JSONValue: Decodable {
@@ -296,7 +337,10 @@ final class APIClient {
     func createDecision(_ payload: DecisionCreateRequest) async throws { try await post(path: "decisions", payload: payload) }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
+    func createProject(_ payload: ProjectCreateRequest) async throws { try await post(path: "projects", payload: payload) }
+    func updateProject(_ id: Int, _ payload: ProjectUpdateRequest) async throws { try await patch(path: "projects/\(id)", payload: payload) }
     func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
+    func createTask(_ payload: TaskCreateRequest) async throws { try await post(path: "tasks", payload: payload) }
     func currentWeeklyPlan() async throws -> WeeklyPlanResponse { try await authorized(path: "weekly-plans/current") }
     func pendingActions() async throws -> [AssistantAction] { let response: ActionListResponse = try await authorized(path: "assistant/actions"); return response.items.filter { $0.status == "pending" } }
     func confirmAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/confirm", method: "POST") }

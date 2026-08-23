@@ -405,6 +405,7 @@ private enum EntryError: LocalizedError {
 struct TasksView: View {
     @ObservedObject var state: AppState
     @State private var filter = "全部"
+    @State private var showingCreate = false
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -432,6 +433,8 @@ struct TasksView: View {
             }
             }
             .navigationTitle("事项")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showingCreate = true } label: { Image(systemName: "plus") }.accessibilityLabel("新建事项") } }
+            .sheet(isPresented: $showingCreate) { TaskFormView(state: state) }
             .refreshable { await state.refreshDashboard() }
         }
     }
@@ -441,9 +444,56 @@ struct TasksView: View {
     }
 }
 
+private struct TaskFormView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var state: AppState
+    @State private var title = ""
+    @State private var description = ""
+    @State private var dueOn = ""
+    @State private var priority = 3
+    @State private var impact = 3
+    @State private var urgency = 3
+    @State private var estimatedMinutes = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("事项标题", text: $title)
+                TextField("说明（可选）", text: $description, axis: .vertical).lineLimit(2...6)
+                TextField("截止日期 YYYY-MM-DD（可选）", text: $dueOn)
+                Stepper("优先级：\(priority)", value: $priority, in: 1...5)
+                Stepper("影响：\(impact)", value: $impact, in: 1...5)
+                Stepper("紧急度：\(urgency)", value: $urgency, in: 1...5)
+                TextField("预计用时（分钟，可选）", text: $estimatedMinutes).keyboardType(.numberPad)
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button { save() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text("创建事项").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
+            }
+            .navigationTitle("新建事项")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+
+    private func save() {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { errorMessage = "请输入事项标题"; return }
+        let minutes = estimatedMinutes.isEmpty ? nil : Int(estimatedMinutes)
+        if let minutes, !(5...1440).contains(minutes) { errorMessage = "预计用时应在 5 到 1440 分钟之间"; return }
+        isSaving = true; errorMessage = nil
+        Task {
+            do {
+                try await state.api.createTask(TaskCreateRequest(title: title, description: description.isEmpty ? nil : description, projectId: nil, priority: priority, dueOn: dueOn.isEmpty ? nil : dueOn, impact: impact, urgency: urgency, estimatedMinutes: minutes))
+                await state.refreshDashboard(); dismiss()
+            } catch { errorMessage = error.localizedDescription; isSaving = false }
+        }
+    }
+}
+
 struct ProjectsView: View {
     @ObservedObject var state: AppState
     @State private var selected: ProjectSummary?
+    @State private var editingProject: ProjectSummary?
+    @State private var showingCreate = false
     var body: some View {
         NavigationStack {
             List {
@@ -463,12 +513,117 @@ struct ProjectsView: View {
                             .padding(.vertical, 6)
                         }
                         .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button { editingProject = project } label: { Label("编辑", systemImage: "pencil") }.tint(.orange)
+                            Button(role: .destructive) { archive(project) } label: { Label("归档", systemImage: "archivebox") }
+                        }
                     }
                 }
             }
             .navigationTitle("项目")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingCreate = true } label: { Image(systemName: "plus") }.accessibilityLabel("新建项目")
+                }
+            }
             .sheet(item: $selected) { ProjectWarRoom(project: $0) }
+            .sheet(item: $editingProject) { ProjectFormView(state: state, project: $0) }
+            .sheet(isPresented: $showingCreate) { ProjectFormView(state: state, project: nil) }
         }
+    }
+
+    private func archive(_ project: ProjectSummary) {
+        Task {
+            do {
+                try await state.api.updateProject(project.id, ProjectUpdateRequest(name: nil, objective: nil, status: "archived", priority: nil, dueOn: nil, stage: nil, successCriteria: nil, keyHypothesis: nil, riskSummary: nil, blockerSummary: nil, nextAction: nil))
+                await state.refreshDashboard()
+            } catch { state.errorMessage = error.localizedDescription }
+        }
+    }
+}
+
+private struct ProjectFormView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var state: AppState
+    let project: ProjectSummary?
+    @State private var name: String
+    @State private var objective: String
+    @State private var stage: String
+    @State private var status: String
+    @State private var priority: Int
+    @State private var dueOn: String
+    @State private var successCriteria: String
+    @State private var keyHypothesis: String
+    @State private var riskSummary: String
+    @State private var blockerSummary: String
+    @State private var nextAction: String
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(state: AppState, project: ProjectSummary?) {
+        self.state = state
+        self.project = project
+        _name = State(initialValue: project?.name ?? "")
+        _objective = State(initialValue: project?.objective ?? "")
+        _stage = State(initialValue: project?.stage ?? "planning")
+        _status = State(initialValue: project?.status ?? "planning")
+        _priority = State(initialValue: project?.priority ?? 3)
+        _dueOn = State(initialValue: project?.dueOn ?? "")
+        _successCriteria = State(initialValue: project?.successCriteria ?? "")
+        _keyHypothesis = State(initialValue: project?.keyHypothesis ?? "")
+        _riskSummary = State(initialValue: project?.riskSummary ?? "")
+        _blockerSummary = State(initialValue: project?.blockerSummary ?? "")
+        _nextAction = State(initialValue: project?.nextAction ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基本信息") {
+                    TextField("项目名称", text: $name)
+                    TextField("目标", text: $objective, axis: .vertical).lineLimit(2...5)
+                    Picker("阶段", selection: $stage) {
+                        Text("规划").tag("planning"); Text("探索").tag("discovery"); Text("验证").tag("validation"); Text("交付").tag("delivery")
+                    }
+                    Stepper("优先级：\(priority)", value: $priority, in: 1...5)
+                    TextField("截止日期 YYYY-MM-DD（可选）", text: $dueOn)
+                }
+                if project != nil {
+                    Picker("项目状态", selection: $status) { Text("规划中").tag("planning"); Text("推进中").tag("active"); Text("已暂停").tag("paused"); Text("已完成").tag("completed") }
+                }
+                Section("作战信息") {
+                    TextField("成功标准", text: $successCriteria, axis: .vertical).lineLimit(2...5)
+                    TextField("关键假设", text: $keyHypothesis, axis: .vertical).lineLimit(2...5)
+                    TextField("主要风险", text: $riskSummary, axis: .vertical).lineLimit(2...5)
+                    TextField("阻塞情况", text: $blockerSummary, axis: .vertical).lineLimit(2...5)
+                    TextField("下一步行动", text: $nextAction, axis: .vertical).lineLimit(2...5)
+                }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                Button { save() } label: { HStack { Spacer(); if isSaving { ProgressView() } else { Text(project == nil ? "创建项目" : "保存修改").fontWeight(.semibold) }; Spacer() } }.disabled(isSaving)
+            }
+            .navigationTitle(project == nil ? "新建项目" : "编辑项目")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+    }
+
+    private func save() {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { errorMessage = "请输入项目名称"; return }
+        isSaving = true; errorMessage = nil
+        Task {
+            do {
+                if let project {
+                    try await state.api.updateProject(project.id, ProjectUpdateRequest(name: name, objective: optional(objective), status: status, priority: priority, dueOn: optional(dueOn), stage: stage, successCriteria: optional(successCriteria), keyHypothesis: optional(keyHypothesis), riskSummary: optional(riskSummary), blockerSummary: optional(blockerSummary), nextAction: optional(nextAction)))
+                } else {
+                    try await state.api.createProject(ProjectCreateRequest(name: name, objective: optional(objective), priority: priority, dueOn: optional(dueOn), stage: stage, successCriteria: optional(successCriteria), keyHypothesis: optional(keyHypothesis), riskSummary: optional(riskSummary), blockerSummary: optional(blockerSummary), nextAction: optional(nextAction)))
+                }
+                await state.refreshDashboard(); dismiss()
+            } catch { errorMessage = error.localizedDescription; isSaving = false }
+        }
+    }
+
+    private func optional(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
