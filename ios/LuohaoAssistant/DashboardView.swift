@@ -119,4 +119,37 @@ struct ProjectWarRoom: View {
 
 struct WeeklyPlanView: View {
     @ObservedObject var state: AppState
-    var body: some View { NavigationStack { List { if let plan = state.weeklyPlan { Section("Theme") { Text(plan.theme ?? "Not set") }; Section("Outcomes") { ForEach(plan.outcomes, id: \.self) { outcome in Text(outcome) } }; Section("Priorities") { ForEach(plan.priorities, id: \.self) { priority in Text(priority) } }; Section("Risks") { ForEach(plan.risks, id: \.self) { risk in Text(risk) } } } else { ContentUnavailableView("No plan this week", systemImage: "calendar.badge.plus", description: Text("Ask the AI assistant to plan the week, then confirm the draft.")) } }.navigationTitle("Weekly plan") } }
+    var body: some View {
+        NavigationStack {
+            List {
+                if let plan = state.weeklyPlan {
+                    Section("Theme") {
+                        Text(plan.theme ?? "Not set")
+                    }
+                    Section("Outcomes") {
+                        ForEach(plan.outcomes, id: \.self) { outcome in
+                            Text(outcome)
+                        }
+                    }
+                    Section("Priorities") {
+                        ForEach(plan.priorities, id: \.self) { priority in
+                            Text(priority)
+                        }
+                    }
+                    Section("Risks") {
+                        ForEach(plan.risks, id: \.self) { risk in
+                            Text(risk)
+                        }
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "No plan this week",
+                        systemImage: "calendar.badge.plus",
+                        description: Text("Ask the AI assistant to plan the week, then confirm the draft.")
+                    )
+                }
+            }
+            .navigationTitle("Weekly plan")
+        }
+    }
+}
