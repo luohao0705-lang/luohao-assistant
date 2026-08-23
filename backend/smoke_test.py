@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 client = TestClient(app)
 assert client.get("/health").status_code == 200
+assert app.version == "0.4.0"
 assert client.get("/dashboard/summary").status_code == 401
 login = client.post("/auth/login", json={"password": "test-password-123"})
 assert login.status_code == 200, login.text
