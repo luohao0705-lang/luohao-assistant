@@ -27,7 +27,7 @@ def cashflow_forecast(db: Session, days: int = 90) -> list[dict]:
     accounts = db.scalars(select(Account)).all()
     transactions = db.scalars(select(Transaction)).all()
     debts = db.scalars(select(Debt).where(Debt.status == "open")).all()
-    balance = sum(item.balance_cents for item in accounts)
+    balance = available_cash_cents(accounts, transactions)
     today = date.today()
     points: list[dict] = []
     for offset in range(days + 1):
@@ -41,6 +41,22 @@ def cashflow_forecast(db: Session, days: int = 90) -> list[dict]:
                 balance -= debt.outstanding_cents
         points.append({"date": current.isoformat(), "balance_cents": balance})
     return points
+
+
+def available_cash_cents(accounts: list[Account], transactions: list[Transaction]) -> int:
+    """Current cash = account balances plus confirmed standalone entries.
+
+    Entries linked to an account are assumed to be reflected by that account's
+    current balance. AI-created entries without an account still need to affect
+    the command center immediately.
+    """
+    account_balance = sum(item.balance_cents for item in accounts)
+    standalone = sum(
+        item.amount_cents if item.kind == "income" else -item.amount_cents
+        for item in transactions
+        if item.account_id is None and item.status in {"confirmed", "paid"}
+    )
+    return account_balance + standalone
 
 
 def task_priority_score(item: Task, today: date | None = None) -> int:
@@ -73,7 +89,7 @@ def dashboard_snapshot(db: Session) -> dict:
     projects = db.scalars(select(Project).where(Project.status.in_(["planning", "active", "paused"]))).all()
     tasks = db.scalars(select(Task).where(Task.status.in_(["todo", "in_progress", "blocked"]))).all()
     today = date.today()
-    cash_cents = sum(item.balance_cents for item in accounts)
+    cash_cents = available_cash_cents(accounts, transactions)
     outstanding_debt_cents = sum(item.outstanding_cents for item in debts)
     planned_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     planned_expense = sum(item.amount_cents for item in transactions if item.kind == "expense" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)

@@ -73,6 +73,8 @@ with tempfile.TemporaryDirectory() as directory:
     finance_action_id = client.get("/assistant/actions?status=pending", headers=headers).json()["items"][-1]["id"]
     finance_confirmation = client.post(f"/assistant/actions/{finance_action_id}/confirm", headers=headers)
     assert finance_confirmation.status_code == 200 and finance_confirmation.json()["result"]["transaction_id"]
+    summary_after_finance = client.get("/dashboard/summary", headers=headers)
+    assert summary_after_finance.status_code == 200 and summary_after_finance.json()["cash_cents"] == 168000, summary_after_finance.text
     legacy_finance_db = SessionLocal()
     legacy_finance = execute_tool("propose_tasks", {"tasks": [{"description": "登记微信小店收入680元，今天下午"}]}, db=legacy_finance_db)
     legacy_finance_db.close()
