@@ -64,10 +64,29 @@ struct DebtSummary: Decodable, Identifiable {
 }
 
 struct TransactionCreateRequest: Encodable {
+    let accountId: Int?
     let kind: String
     let amountCents: Int
     let occurredOn: String
     let status: String
+    let counterparty: String?
+    let note: String?
+    enum CodingKeys: String, CodingKey { case accountId = "account_id"; case kind; case amountCents = "amount_cents"; case occurredOn = "occurred_on"; case status, counterparty, note }
+}
+
+struct AccountCreateRequest: Encodable {
+    let name: String
+    let kind: String
+    let balanceCents: Int
+    let currency: String
+    enum CodingKeys: String, CodingKey { case name, kind; case balanceCents = "balance_cents"; case currency }
+}
+
+struct TransactionUpdateRequest: Encodable {
+    let kind: String?
+    let amountCents: Int?
+    let occurredOn: String?
+    let status: String?
     let counterparty: String?
     let note: String?
     enum CodingKeys: String, CodingKey { case kind; case amountCents = "amount_cents"; case occurredOn = "occurred_on"; case status, counterparty, note }
@@ -81,6 +100,34 @@ struct DebtCreateRequest: Encodable {
     let interestRate: Double?
     let note: String?
     enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case note }
+}
+
+struct DebtUpdateRequest: Encodable {
+    let creditor: String?
+    let principalCents: Int?
+    let outstandingCents: Int?
+    let dueOn: String?
+    let status: String?
+    let note: String?
+    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case status, note }
+}
+
+struct MemoryCreateRequest: Encodable {
+    let content: String
+    let memoryType: String
+    let projectId: Int?
+    let source: String
+    enum CodingKeys: String, CodingKey { case content; case memoryType = "memory_type"; case projectId = "project_id"; case source }
+}
+
+struct DecisionCreateRequest: Encodable {
+    let projectId: Int?
+    let title: String
+    let context: String?
+    let decision: String
+    let rationale: String?
+    let reviewOn: String?
+    enum CodingKeys: String, CodingKey { case projectId = "project_id"; case title, context, decision, rationale; case reviewOn = "review_on" }
 }
 
 struct MemorySummary: Decodable, Identifiable {
@@ -129,8 +176,9 @@ struct FocusTask: Decodable, Identifiable {
     let urgency: Int
     let dueOn: String?
     let estimatedMinutes: Int?
+    let blockedReason: String?
     let score: Int
-    enum CodingKeys: String, CodingKey { case id, title; case projectId = "project_id"; case status, priority, impact, urgency; case dueOn = "due_on"; case estimatedMinutes = "estimated_minutes"; case score }
+    enum CodingKeys: String, CodingKey { case id, title; case projectId = "project_id"; case status, priority, impact, urgency; case dueOn = "due_on"; case estimatedMinutes = "estimated_minutes"; case blockedReason = "blocked_reason"; case score }
 }
 
 struct BlockedTask: Decodable, Identifiable {
@@ -183,18 +231,22 @@ struct AssistantAction: Decodable, Identifiable {
 }
 
 struct TaskUpdateRequest: Encodable {
+    let title: String?
     let status: String?
     let priority: Int?
     let impact: Int?
     let urgency: Int?
+    let blockedReason: String?
 
-    enum CodingKeys: String, CodingKey { case status, priority, impact, urgency }
+    enum CodingKeys: String, CodingKey { case title, status, priority, impact, urgency; case blockedReason = "blocked_reason" }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(title, forKey: .title)
         try container.encodeIfPresent(status, forKey: .status)
         try container.encodeIfPresent(priority, forKey: .priority)
         try container.encodeIfPresent(impact, forKey: .impact)
         try container.encodeIfPresent(urgency, forKey: .urgency)
+        try container.encodeIfPresent(blockedReason, forKey: .blockedReason)
     }
 }
 
@@ -209,7 +261,7 @@ enum JSONValue: Decodable {
 enum APIError: LocalizedError {
     case invalidResponse; case unauthorized; case network(Error)
     var errorDescription: String? {
-        switch self { case .invalidResponse: return "Invalid server response"; case .unauthorized: return "Session expired. Please sign in again."; case .network(let error): return "Network error: \(error.localizedDescription)" }
+        switch self { case .invalidResponse: return "服务器返回了无法识别的数据"; case .unauthorized: return "登录已过期，请重新登录"; case .network: return "网络连接失败，请检查网络后重试" }
     }
 }
 
@@ -232,10 +284,16 @@ final class APIClient {
     func accounts() async throws -> [AccountSummary] { let response: AccountListResponse = try await authorized(path: "finance/accounts"); return response.items }
     func transactions() async throws -> [TransactionSummary] { let response: TransactionListResponse = try await authorized(path: "finance/transactions"); return response.items }
     func debts() async throws -> [DebtSummary] { let response: DebtListResponse = try await authorized(path: "finance/debts"); return response.items }
+    func createAccount(_ payload: AccountCreateRequest) async throws { try await post(path: "finance/accounts", payload: payload) }
     func createTransaction(_ payload: TransactionCreateRequest) async throws { try await post(path: "finance/transactions", payload: payload) }
+    func updateTransaction(_ id: Int, _ payload: TransactionUpdateRequest) async throws { try await patch(path: "finance/transactions/\(id)", payload: payload) }
     func createDebt(_ payload: DebtCreateRequest) async throws { try await post(path: "finance/debts", payload: payload) }
+    func updateDebt(_ id: Int, _ payload: DebtUpdateRequest) async throws { try await patch(path: "finance/debts/\(id)", payload: payload) }
     func memories() async throws -> [MemorySummary] { let response: MemoryListResponse = try await authorized(path: "memories"); return response.items }
     func decisions() async throws -> [DecisionSummary] { let response: DecisionListResponse = try await authorized(path: "decisions"); return response.items }
+    func createMemory(_ payload: MemoryCreateRequest) async throws { try await post(path: "memories", payload: payload) }
+    func archiveMemory(_ id: Int) async throws { _ = try await authorizedAction(path: "memories/\(id)/archive", method: "POST") }
+    func createDecision(_ payload: DecisionCreateRequest) async throws { try await post(path: "decisions", payload: payload) }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
     func tasks() async throws -> [FocusTask] { let response: TaskListResponse = try await authorized(path: "tasks"); return response.items }
@@ -243,11 +301,11 @@ final class APIClient {
     func pendingActions() async throws -> [AssistantAction] { let response: ActionListResponse = try await authorized(path: "assistant/actions"); return response.items.filter { $0.status == "pending" } }
     func confirmAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/confirm", method: "POST") }
     func cancelAction(_ id: Int) async throws { _ = try await authorizedAction(path: "assistant/actions/\(id)/cancel", method: "POST") }
-    func updateTask(_ id: Int, status: String? = nil, priority: Int? = nil, impact: Int? = nil, urgency: Int? = nil) async throws {
+    func updateTask(_ id: Int, title: String? = nil, status: String? = nil, priority: Int? = nil, impact: Int? = nil, urgency: Int? = nil, blockedReason: String? = nil) async throws {
         var request = try authorizedRequest(path: "tasks/\(id)")
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(TaskUpdateRequest(status: status, priority: priority, impact: impact, urgency: urgency))
+        request.httpBody = try JSONEncoder().encode(TaskUpdateRequest(title: title, status: status, priority: priority, impact: impact, urgency: urgency, blockedReason: blockedReason))
         let (_, response) = try await perform(request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
     }
@@ -259,6 +317,14 @@ final class APIClient {
     private func post<T: Encodable>(path: String, payload: T) async throws {
         var request = try authorizedRequest(path: path)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (_, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw error(for: response) }
+    }
+    private func patch<T: Encodable>(path: String, payload: T) async throws {
+        var request = try authorizedRequest(path: path)
+        request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
         let (_, response) = try await perform(request)

@@ -56,7 +56,9 @@ final class AppState: ObservableObject {
     }
 
     func refreshDashboard() async {
+        isLoading = true
         errorMessage = nil
+        defer { isLoading = false }
         do {
             async let summary = api.dashboard()
             async let cashflowPoints = api.cashflow()

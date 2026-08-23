@@ -54,7 +54,7 @@ struct DashboardView: View {
                 }
                 .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(); AxisValueLabel { if let amount = value.as(Double.self) { Text(currency.string(from: NSNumber(value: amount)) ?? "-").font(.caption2) } } } }
                 .frame(height: 150)
-                .accessibilityLabel("Cash balance forecast for the next 45 days")
+                .accessibilityLabel("未来 45 天现金余额预测")
             }
         }
     }
@@ -108,7 +108,7 @@ struct DashboardView: View {
     }
 
     private var actionSection: some View {
-        VStack(alignment: .leading, spacing: 10) { sectionTitle("Needs your confirmation", detail: "AI never writes without approval"); ForEach(state.pendingActions) { action in HStack { VStack(alignment: .leading) { Text(action.actionType).font(.headline); Text("Proposal ready. Confirm before writing.").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { Task { await state.resolveAction(action, confirm: false) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("Cancel action"); Button { Task { await state.resolveAction(action, confirm: true) } } label: { Image(systemName: "checkmark") }.buttonStyle(.borderless).foregroundStyle(.orange).accessibilityLabel("Confirm action") } .padding(.vertical, 6) } }
+                        VStack(alignment: .leading, spacing: 10) { sectionTitle("等待你的确认", detail: "AI 不会未经批准写入"); ForEach(state.pendingActions) { action in HStack { VStack(alignment: .leading) { Text(action.actionType).font(.headline); Text("方案已生成，请确认后写入").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { Task { await state.resolveAction(action, confirm: false) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("取消操作"); Button { Task { await state.resolveAction(action, confirm: true) } } label: { Image(systemName: "checkmark") }.buttonStyle(.borderless).foregroundStyle(.orange).accessibilityLabel("确认操作") } .padding(.vertical, 6) } }
     }
 
     private func riskSection(_ flags: [String]) -> some View { VStack(alignment: .leading, spacing: 8) { sectionTitle("需要关注的风险", detail: nil); ForEach(flags, id: \.self) { Text($0).font(.subheadline).foregroundStyle(.orange) } }.padding(14).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10)) }

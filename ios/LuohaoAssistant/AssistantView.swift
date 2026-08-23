@@ -26,9 +26,17 @@ struct AssistantView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("等待你的确认").font(.headline)
                                 ForEach(state.pendingActions) { action in
-                                    HStack { Text(action.actionType).font(.subheadline); Spacer(); Button("取消") { Task { await state.resolveAction(action, confirm: false) } }.buttonStyle(.borderless); Button("确认执行") { Task { await state.resolveAction(action, confirm: true) } }.buttonStyle(.borderedProminent).tint(.orange) }
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(actionTitle(action.actionType)).font(.subheadline.weight(.semibold))
+                                        Text(actionSummary(action.payload)).font(.caption).foregroundStyle(.secondary)
+                                        HStack { Spacer(); Button("取消") { Task { await state.resolveAction(action, confirm: false) } }.buttonStyle(.borderless); Button("确认执行") { Task { await state.resolveAction(action, confirm: true) } }.buttonStyle(.borderedProminent).tint(.orange) }
+                                    }
+                                    .padding(.vertical, 4)
                                 }
                             }.padding(12).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        if let error = state.errorMessage, reply.isEmpty {
+                            ContentUnavailableView("暂时无法连接助理", systemImage: "wifi.exclamationmark", description: Text(error))
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -46,5 +54,24 @@ struct AssistantView: View {
     private func send() {
         let prompt = text; text = ""; isSending = true
         Task { defer { isSending = false }; do { let response = try await state.api.command(prompt, mode: mode); reply = response.reply; toolResults = response.toolResults; await state.refreshDashboard() } catch { reply = error.localizedDescription } }
+    }
+
+    private func actionTitle(_ type: String) -> String {
+        ["propose_tasks": "新增事项方案", "create_project_plan": "建立项目方案", "create_weekly_plan": "生成本周计划", "create_memory": "记录一条经营记忆", "create_decision": "记录一项经营决策"][type] ?? "待确认操作"
+    }
+
+    private func actionSummary(_ value: JSONValue) -> String {
+        switch value {
+        case .object(let object):
+            let keys = ["name", "title", "objective", "next_action", "decision", "content"]
+            for key in keys {
+                if let item = object[key], case .string(let text) = item, !text.isEmpty { return text }
+            }
+            if let tasks = object["tasks"], case .array(let items) = tasks { return "将新增 \(items.count) 项待办" }
+            return "AI 已整理出一份待确认方案"
+        case .array(let items): return "包含 \(items.count) 项内容"
+        case .string(let text): return text
+        default: return "AI 已整理出一份待确认方案"
+        }
     }
 }
