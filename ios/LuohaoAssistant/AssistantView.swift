@@ -19,7 +19,7 @@ struct AssistantView: View {
                         if !toolResults.isEmpty {
                             ForEach(Array(toolResults.enumerated()), id: \.offset) { _, item in
                                 Label("已生成待确认方案", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.orange)
-                                if let name = item["name"], case .string(let value) = name { Text(value).font(.caption2).foregroundStyle(.secondary) }
+                                if let name = item["name"], case .string(let value) = name { Text("已调用：\(localizedToolName(value))").font(.caption2).foregroundStyle(.secondary) }
                             }
                         }
                         if !state.pendingActions.isEmpty {
@@ -57,7 +57,7 @@ struct AssistantView: View {
     }
 
     private func actionTitle(_ type: String) -> String {
-        ["propose_tasks": "新增事项方案", "create_project_plan": "建立项目方案", "create_weekly_plan": "生成本周计划", "create_memory": "记录一条经营记忆", "create_decision": "记录一项经营决策"][type] ?? "待确认操作"
+        ["propose_tasks": "新增事项方案", "create_project_plan": "建立项目方案", "create_weekly_plan": "生成本周计划", "create_memory": "记录一条经营记忆", "create_decision": "记录一项经营决策"][type] ?? localizedActionType(type)
     }
 
     private func actionSummary(_ value: JSONValue) -> String {

@@ -123,7 +123,7 @@ struct FinanceView: View {
         switch section {
         case "账户":
             if state.accounts.isEmpty { empty("还没有账户", message: "使用 AI 助理或后续新增账户。", icon: "building.columns") }
-            else { ForEach(state.accounts) { account in detailRow(account.name, account.kind, account.balanceCents, account.currency) } }
+            else { ForEach(state.accounts) { account in detailRow(account.name, localizedAccountKind(account.kind), account.balanceCents, account.currency) } }
         case "流水":
             if state.transactions.isEmpty { empty("还没有流水", message: "收入和支出会在这里按日期记录。", icon: "list.bullet.rectangle") }
             else { ForEach(state.transactions.prefix(20)) { item in
@@ -134,7 +134,7 @@ struct FinanceView: View {
         case "债务":
             if state.debts.isEmpty { empty("没有未偿债务", message: "新增贷款或应付款后，这里会显示还款压力。", icon: "creditcard") }
             else { ForEach(state.debts) { debt in
-                Button { selectedDebt = debt } label: { detailRow(debt.creditor, debt.dueOn.map { "到期 \($0)" } ?? "未设到期日", debt.outstandingCents, "CNY") }.buttonStyle(.plain)
+                Button { selectedDebt = debt } label: { detailRow(debt.creditor, "\(localizedDebtStatus(debt.status)) · " + (debt.dueOn.map { "到期 \($0)" } ?? "未设到期日"), debt.outstandingCents, "CNY") }.buttonStyle(.plain)
             } }
         default:
             Text("金额明细已按账户、流水和债务分开整理。")
@@ -411,7 +411,7 @@ struct ProjectsView: View {
                     ForEach(state.projects) { project in
                         Button { selected = project } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                HStack { Text(project.name).font(.headline); Spacer(); Text(project.stage).font(.caption).foregroundStyle(.secondary) }
+                                HStack { Text(project.name).font(.headline); Spacer(); Text(localizedProjectStage(project.stage)).font(.caption).foregroundStyle(.secondary) }
                                 Text(project.nextAction ?? project.objective ?? "尚未定义下一步")
                                     .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                                 Text("待办 \(project.openTaskCount) 项")

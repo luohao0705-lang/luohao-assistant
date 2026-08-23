@@ -74,9 +74,9 @@ struct DashboardView: View {
             if let focus = state.dailyFocus?.focus, !focus.isEmpty {
                 ForEach(focus) { task in
                     HStack(spacing: 12) {
-                        Button { Task { await complete(task) } } label: { Image(systemName: task.status == "done" ? "checkmark.circle.fill" : "circle").foregroundStyle(task.status == "done" ? .green : .secondary) }.buttonStyle(.borderless).accessibilityLabel(task.status == "done" ? "Completed" : "Mark complete")
+                        Button { Task { await complete(task) } } label: { Image(systemName: task.status == "done" ? "checkmark.circle.fill" : "circle").foregroundStyle(task.status == "done" ? .green : .secondary) }.buttonStyle(.borderless).accessibilityLabel(task.status == "done" ? "已完成" : "标记完成")
                         Text("\(task.score)").font(.caption.weight(.semibold)).monospacedDigit().frame(width: 28)
-                        VStack(alignment: .leading, spacing: 3) { Text(task.title).font(.headline); Text(task.status + (task.dueOn.map { " | \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 3) { Text(task.title).font(.headline); Text(localizedTaskStatus(task.status) + (task.dueOn.map { " · \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary) }
                         Spacer()
                         Image(systemName: "arrow.up.right").foregroundStyle(.orange)
                     }.padding(.vertical, 8)
@@ -97,7 +97,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("项目作战室", detail: "\(state.projects.count) 个项目")
             ForEach(state.projects.prefix(4)) { project in
-                Button { selectedProject = project } label: { HStack { VStack(alignment: .leading, spacing: 4) { Text(project.name).font(.headline).foregroundStyle(.primary); Text(project.nextAction ?? project.objective ?? "先定义这个项目的下一步").font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); VStack(alignment: .trailing, spacing: 4) { Text("\(project.openTaskCount) 项待办").font(.caption.weight(.semibold)); Text(project.stage).font(.caption2).foregroundStyle(.secondary) } } }.buttonStyle(.plain).padding(.vertical, 6)
+                Button { selectedProject = project } label: { HStack { VStack(alignment: .leading, spacing: 4) { Text(project.name).font(.headline).foregroundStyle(.primary); Text(project.nextAction ?? project.objective ?? "先定义这个项目的下一步").font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); VStack(alignment: .trailing, spacing: 4) { Text("\(project.openTaskCount) 项待办").font(.caption.weight(.semibold)); Text(localizedProjectStage(project.stage)).font(.caption2).foregroundStyle(.secondary) } } }.buttonStyle(.plain).padding(.vertical, 6)
             }
             if state.projects.isEmpty { Text("还没有项目。用语音说出一个目标，AI 助理会帮你建立项目、路径和任务。").font(.subheadline).foregroundStyle(.secondary) }
         }
@@ -108,16 +108,24 @@ struct DashboardView: View {
     }
 
     private var actionSection: some View {
-                        VStack(alignment: .leading, spacing: 10) { sectionTitle("等待你的确认", detail: "AI 不会未经批准写入"); ForEach(state.pendingActions) { action in HStack { VStack(alignment: .leading) { Text(action.actionType).font(.headline); Text("方案已生成，请确认后写入").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { Task { await state.resolveAction(action, confirm: false) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("取消操作"); Button { Task { await state.resolveAction(action, confirm: true) } } label: { Image(systemName: "checkmark") }.buttonStyle(.borderless).foregroundStyle(.orange).accessibilityLabel("确认操作") } .padding(.vertical, 6) } }
+                        VStack(alignment: .leading, spacing: 10) { sectionTitle("等待你的确认", detail: "AI 不会未经批准写入"); ForEach(state.pendingActions) { action in HStack { VStack(alignment: .leading) { Text(localizedActionType(action.actionType)).font(.headline); Text("方案已生成，请确认后写入").font(.caption).foregroundStyle(.secondary) }; Spacer(); Button { Task { await state.resolveAction(action, confirm: false) } } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("取消操作"); Button { Task { await state.resolveAction(action, confirm: true) } } label: { Image(systemName: "checkmark") }.buttonStyle(.borderless).foregroundStyle(.orange).accessibilityLabel("确认操作") } .padding(.vertical, 6) } }
     }
 
-    private func riskSection(_ flags: [String]) -> some View { VStack(alignment: .leading, spacing: 8) { sectionTitle("需要关注的风险", detail: nil); ForEach(flags, id: \.self) { Text($0).font(.subheadline).foregroundStyle(.orange) } }.padding(14).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10)) }
+    private func riskSection(_ flags: [String]) -> some View { VStack(alignment: .leading, spacing: 8) { sectionTitle("需要关注的风险", detail: nil); ForEach(flags, id: \.self) { Text(localizedRiskFlag($0)).font(.subheadline).foregroundStyle(.orange) } }.padding(14).background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10)) }
+
+    private func localizedRiskFlag(_ value: String) -> String {
+        if value.hasPrefix("Cash gap forecast on ") { return "预测现金缺口：\(value.replacingOccurrences(of: "Cash gap forecast on ", with: ""))" }
+        if value == "Debt due within 30 days exceeds current cash" { return "未来 30 天到期债务超过当前现金" }
+        if value.hasPrefix("Overdue expected income: ") { return "逾期预计收入：\(value.replacingOccurrences(of: "Overdue expected income: ", with: ""))" }
+        if value.hasPrefix("Blocked work items requiring owner action: ") { return "有待你处理的阻塞事项：\(value.replacingOccurrences(of: "Blocked work items requiring owner action: ", with: ""))" }
+        return value
+    }
     private func sectionTitle(_ title: String, detail: String?) -> some View { HStack { Text(title).font(.title3.weight(.semibold)); Spacer(); if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) } } }
 }
 
 struct ProjectWarRoom: View {
     let project: ProjectSummary
-    var body: some View { NavigationStack { ScrollView { VStack(alignment: .leading, spacing: 18) { Text(project.name).font(.largeTitle.weight(.bold)); Text(project.objective ?? "尚未定义目标").font(.body).foregroundStyle(.secondary); detail("阶段", project.stage); detail("成功标准", project.successCriteria); detail("关键假设", project.keyHypothesis); detail("主要风险", project.riskSummary); detail("下一步", project.nextAction); Divider(); Text("任务进度").font(.title2.weight(.semibold)); ForEach(project.tasks) { task in HStack { Circle().fill(task.status == "done" ? .green : .orange).frame(width: 7, height: 7); Text(task.title); Spacer(); Text("优先级 \(task.priority)").font(.caption).foregroundStyle(.secondary) } } }.padding() }.navigationTitle("项目作战室").navigationBarTitleDisplayMode(.inline) } }
+    var body: some View { NavigationStack { ScrollView { VStack(alignment: .leading, spacing: 18) { Text(project.name).font(.largeTitle.weight(.bold)); Text(project.objective ?? "尚未定义目标").font(.body).foregroundStyle(.secondary); detail("阶段", localizedProjectStage(project.stage)); detail("状态", localizedProjectStatus(project.status)); detail("成功标准", project.successCriteria); detail("关键假设", project.keyHypothesis); detail("主要风险", project.riskSummary); detail("下一步", project.nextAction); Divider(); Text("任务进度").font(.title2.weight(.semibold)); ForEach(project.tasks) { task in HStack { Circle().fill(task.status == "done" ? .green : .orange).frame(width: 7, height: 7); Text(task.title); Spacer(); Text("\(localizedTaskStatus(task.status)) · 优先级 \(task.priority)").font(.caption).foregroundStyle(.secondary) } } }.padding() }.navigationTitle("项目作战室").navigationBarTitleDisplayMode(.inline) } }
     @ViewBuilder private func detail(_ title: String, _ value: String?) -> some View { if let value, !value.isEmpty { VStack(alignment: .leading, spacing: 4) { Text(title).font(.caption).foregroundStyle(.secondary); Text(value).font(.body) } } }
 }
 
