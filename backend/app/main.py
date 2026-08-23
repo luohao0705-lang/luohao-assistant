@@ -16,7 +16,7 @@ from .security import create_access_token, require_auth, verify_password
 settings = get_settings()
 if settings.app_env.lower() != "production":
     Base.metadata.create_all(bind=engine)
-app = FastAPI(title="Luohao Assistant API", version="0.3.0")
+app = FastAPI(title="Luohao Assistant API", version="0.4.0")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 

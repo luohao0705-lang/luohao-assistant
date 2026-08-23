@@ -32,6 +32,12 @@ curl -fsS https://luohao.hsh6.com/health/ready
 
 The API container runs `alembic upgrade head` before Uvicorn. Caddy terminates HTTPS and proxies only to the internal API service.
 
+After the health checks pass, run the public API verifier:
+
+```sh
+sh /srv/luohao-assistant/deploy/verify.sh https://luo.hsh6.com
+```
+
 ## Backup
 
 Run `deploy/backup.sh` on a schedule and copy the encrypted backup off-host. Test restore before treating the system as production-ready.
