@@ -34,6 +34,11 @@ with tempfile.TemporaryDirectory() as directory:
     assert cashflow.status_code == 200, cashflow.text
     balances = [point["balance_cents"] for point in cashflow.json()["points"]]
     assert balances[0] == 100000 and balances[1] == 150000 and balances[2] == 130000 and balances[3] == 100000, balances
+    assistant_db = SessionLocal()
+    assistant_dashboard = execute_tool("get_dashboard", {}, assistant_db)
+    assistant_db.close()
+    assert assistant_dashboard["cash_yuan"] == 1000
+    assert "cash_cents" not in assistant_dashboard
 
     project = client.post("/projects", headers=headers, json={"name": "Launch", "objective": "Validate demand", "success_criteria": "Ten interviews", "stage": "discovery"})
     assert project.status_code == 200, project.text
