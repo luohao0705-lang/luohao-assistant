@@ -18,6 +18,17 @@ TOOLS = [
     {"type": "function", "function": {"name": "get_dashboard", "description": "Read the current operating dashboard.", "parameters": {"type": "object", "properties": {}}}},
 ]
 
+READ_ONLY_TOOL_NAMES = {"get_dashboard", "get_daily_focus"}
+READ_ONLY_TOOLS = [
+    tool for tool in TOOLS
+    if tool["function"]["name"] in READ_ONLY_TOOL_NAMES
+]
+
+
+def tools_for_mode(mode: str) -> list[dict]:
+    """Keep read-only and planning capabilities separate at the API boundary."""
+    return TOOLS if mode == "plan" else READ_ONLY_TOOLS
+
 
 def _date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
@@ -131,6 +142,7 @@ def execute_tool(name: str, arguments: dict, db: Session) -> dict:
 
 async def run_assistant(text: str, mode: str, db: Session, history: list[dict] | None = None) -> dict:
     settings = get_settings()
+    is_planning = mode == "plan"
     snapshot = dashboard_snapshot(db)
     daily_focus = daily_focus_snapshot(db)
     terms = [term for term in text.split() if len(term) > 1][:5]
@@ -149,6 +161,11 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
     messages = [
         {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。涉及登记收入、支出、收款、付款、贷款、债务或账户金额时，必须使用 propose_finance_entry，不能用事项工具代替。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
         {"role": "system", "content": json.dumps({"dashboard": snapshot, "daily_focus": daily_focus, "memories": memory_context, "pending_actions": pending_context}, ensure_ascii=False)},
+        {"role": "system", "content": (
+            "当前是规划模式。用户要求登记、创建、拆解或推进事项时，直接使用对应工具生成待确认方案；任何写入都必须等待用户确认。"
+            if is_planning else
+            "当前是问答模式。此模式只允许查询和分析，不得创建、修改或登记任何数据；如果用户要求写入或做规划，请明确提示切换到规划模式。"
+        )},
     ]
     # The API is stateless, so the iOS client sends a bounded recent transcript.
     # Keep only valid roles and cap characters to prevent a long chat from crowding out financial context.
@@ -165,13 +182,12 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         history_chars += len(content)
     messages.extend(history_messages)
     messages.append({"role": "user", "content": text})
-    write_intent_terms = ("登记", "收入", "支出", "收款", "付款", "贷款", "债务", "账户", "创建项目", "拆解", "安排", "规划", "推进", "排期")
-    requires_write = mode == "plan" or any(term in text for term in write_intent_terms)
+    available_tools = tools_for_mode(mode)
     payload = {
-        "model": settings.deepseek_reasoner_model if mode == "plan" else settings.deepseek_chat_model,
+        "model": settings.deepseek_reasoner_model if is_planning else settings.deepseek_chat_model,
         "messages": messages,
-        "tools": TOOLS,
-        "tool_choice": "required" if requires_write else "auto",
+        "tools": available_tools,
+        "tool_choice": "required" if is_planning else "auto",
     }
     tool_results = []
     headers = {"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}

@@ -11,12 +11,14 @@ with tempfile.TemporaryDirectory() as directory:
     os.environ["JWT_SECRET"] = "x" * 40
 
     from fastapi.testclient import TestClient
-    from app.assistant import execute_tool
+    from app.assistant import execute_tool, tools_for_mode
     from app.db import SessionLocal, engine
     from app.main import app
     from app.models import EventLog
 
     client = TestClient(app)
+    assert {tool["function"]["name"] for tool in tools_for_mode("chat")} == {"get_dashboard", "get_daily_focus"}
+    assert len(tools_for_mode("plan")) > len(tools_for_mode("chat"))
     login = client.post("/auth/login", json={"password": "test-password-123"})
     assert login.status_code == 200, login.text
     headers = {"Authorization": "Bearer " + login.json()["access_token"]}
