@@ -100,6 +100,7 @@ final class AppState: ObservableObject {
             accounts = accountsValue ?? []
             transactions = transactionsValue ?? []
             debts = debtsValue ?? []
+            await DebtReminderScheduler.sync(debts: debts)
             memories = memoriesValue ?? []
             decisions = decisionsValue ?? []
             weeklyPlan = try await plan.item
