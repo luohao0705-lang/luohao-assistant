@@ -11,7 +11,8 @@ from .config import get_settings
 from .models import Account, AssistantAction, Debt, EventLog, Memory, Project, Task, Transaction, WeeklyPlan
 
 TOOLS = [
-    {"type": "function", "function": {"name": "propose_finance_entry", "description": "Propose an income, expense, debt, or account entry. Use this for recording money; owner confirmation is required before writing.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["income", "expense"]}, "amount_cents": {"type": "integer"}, "occurred_on": {"type": "string"}, "expected_on": {"type": ["string", "null"]}, "counterparty": {"type": ["string", "null"]}, "note": {"type": ["string", "null"]}, "account_id": {"type": ["integer", "null"]}}, "required": ["kind", "amount_cents", "occurred_on"]}}},
+    {"type": "function", "function": {"name": "propose_finance_entry", "description": "Propose an income or expense entry. Use this for recording money; owner confirmation is required before writing.", "parameters": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["income", "expense"]}, "amount_cents": {"type": "integer"}, "occurred_on": {"type": "string"}, "expected_on": {"type": ["string", "null"]}, "counterparty": {"type": ["string", "null"]}, "note": {"type": ["string", "null"]}, "account_id": {"type": ["integer", "null"]}}, "required": ["kind", "amount_cents", "occurred_on"]}}},
+    {"type": "function", "function": {"name": "propose_debt_payment", "description": "Propose recording a loan or debt repayment. Match the creditor, record the actual payment as an expense, and reduce the debt outstanding balance. Owner confirmation is required.", "parameters": {"type": "object", "properties": {"creditor": {"type": "string"}, "payment_cents": {"type": "integer"}, "new_outstanding_cents": {"type": ["integer", "null"]}, "occurred_on": {"type": "string"}, "note": {"type": ["string", "null"]}}, "required": ["creditor", "payment_cents", "occurred_on"]}}},
     {"type": "function", "function": {"name": "propose_tasks", "description": "Propose tasks; owner confirmation is required. Each task must include a short title.", "parameters": {"type": "object", "properties": {"project_id": {"type": ["integer", "null"]}, "tasks": {"type": "array", "items": {"type": "object", "required": ["title"]}}}, "required": ["tasks"]}}},
     {"type": "function", "function": {"name": "create_project_plan", "description": "Propose a project plan; owner confirmation is required.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "objective": {"type": "string"}, "success_criteria": {"type": ["string", "null"]}, "key_hypothesis": {"type": ["string", "null"]}, "risk_summary": {"type": ["string", "null"]}, "next_action": {"type": ["string", "null"]}, "priority": {"type": "integer"}, "due_on": {"type": ["string", "null"]}, "tasks": {"type": "array", "items": {"type": "object"}}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "create_weekly_plan", "description": "Propose a weekly plan; owner confirmation is required.", "parameters": {"type": "object", "properties": {"week_start": {"type": "string"}, "theme": {"type": ["string", "null"]}, "outcomes": {"type": "array", "items": {"type": "string"}}, "priorities": {"type": "array", "items": {"type": "string"}}, "risks": {"type": "array", "items": {"type": "string"}}}, "required": ["week_start", "outcomes", "priorities"]}}},
@@ -29,7 +30,7 @@ READ_ONLY_TOOLS = [
 def tools_for_mode(mode: str) -> list[dict]:
     """Keep read-only and planning capabilities separate at the API boundary."""
     if mode == "finance":
-        return [tool for tool in TOOLS if tool["function"]["name"] == "propose_finance_entry"] + READ_ONLY_TOOLS
+        return [tool for tool in TOOLS if tool["function"]["name"] in {"propose_finance_entry", "propose_debt_payment"}] + READ_ONLY_TOOLS
     if mode == "plan":
         return TOOLS
     return READ_ONLY_TOOLS
@@ -226,7 +227,7 @@ def execute_tool(name: str, arguments: dict, db: Session) -> dict:
         return dashboard_snapshot_for_ai(dashboard_snapshot(db))
     if name == "get_daily_focus":
         return daily_focus_snapshot(db)
-    if name in {"propose_finance_entry", "propose_tasks", "create_project_plan", "create_weekly_plan"}:
+    if name in {"propose_finance_entry", "propose_debt_payment", "propose_tasks", "create_project_plan", "create_weekly_plan"}:
         return _pending_action(name, arguments, db)
     return {"error": f"unsupported tool: {name}"}
 
@@ -250,8 +251,8 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         for item in pending
     ]
     messages = [
-        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。涉及登记收入、支出、收款、付款、贷款、债务或账户金额时，必须使用 propose_finance_entry，不能用事项工具代替。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
-        {"role": "system", "content": json.dumps({"dashboard": dashboard_snapshot_for_ai(snapshot), "daily_focus": daily_focus, "memories": memory_context, "pending_actions": pending_context}, ensure_ascii=False)},
+        {"role": "system", "content": "你是创业者的经营助理。只使用提供的数据，先给出最重要的判断，明确假设和阻塞点。对于查看数据、解释风险、回答事实问题，直接回答，不要加确认流程。涉及登记收入、支出、收款、付款或账户金额时，必须使用 propose_finance_entry；涉及已经偿还贷款或债务时，必须使用 propose_debt_payment，不能用事项工具代替。当用户要求安排、拆解、创建或推进事项时，如果信息足够，不要反问或讲流程，直接给出一份简洁的《待确认方案》，至少包含：目标、具体执行、时间或顺序、主要风险。所有写入必须先生成待确认方案，未经确认不能声称已经写入。方案结尾固定写：确认此方案后，我会立即正式写入。请回复“确认”或告诉我需要修改的地方。只有缺少会改变方案的关键条件时才提问，一次只问一个关键问题，并提供 2-4 个可点击选项。用户提出修改时，基于上一份方案直接给出修订版，不要重新问已经回答过的问题。当你需要用户选择时，在回复最后单独一行输出 QUICK_OPTIONS: 选项1 | 选项2 | 选项3，最多 4 个选项；没有选择必要时不要输出这一行。请始终使用简洁、自然的中文回答。"},
+        {"role": "system", "content": json.dumps({"dashboard": dashboard_snapshot_for_ai(snapshot), "daily_focus": daily_focus, "debts": [{"id": item.id, "creditor": item.creditor, "outstanding_yuan": round(item.outstanding_cents / 100, 2), "monthly_payment_yuan": round((debt_monthly_payment_cents(item) or 0) / 100, 2)} for item in open_debts(db)[0]], "memories": memory_context, "pending_actions": pending_context}, ensure_ascii=False)},
         {"role": "system", "content": (
             ("当前是财务模式。只处理收入、支出、债务和账户登记，必须使用 propose_finance_entry 生成待确认方案；不要创建事项或项目。任何写入都必须等待用户确认。"
              if mode == "finance" else
@@ -309,6 +310,41 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         return {"reply": "AI 服务暂时不可用，经营数据仍可继续查看。", "snapshot": snapshot, "tool_results": [], "suggestions": [], "error": str(exc)}
     reply, suggestions = _extract_suggestions(message.get("content") or "分析完成。")
     return {"reply": reply, "snapshot": dashboard_snapshot(db), "tool_results": tool_results, "suggestions": suggestions}
+
+
+async def morning_brief(db: Session) -> dict:
+    """Build a short, read-only morning brief from current finance and work data."""
+    snapshot = dashboard_snapshot(db)
+    focus = daily_focus_snapshot(db)
+    projects = db.scalars(select(Project).where(Project.status.in_(["planning", "active", "paused"])).order_by(Project.priority.desc()).limit(6)).all()
+    debts, _ = open_debts(db)
+    context = {
+        "dashboard": dashboard_snapshot_for_ai(snapshot),
+        "today_focus": focus,
+        "projects": [{"name": item.name, "next_action": item.next_action, "open_tasks": len([task for task in item.tasks if task.status in {"todo", "in_progress", "blocked"}])} for item in projects],
+        "debts": [{"creditor": item.creditor, "outstanding_yuan": round(item.outstanding_cents / 100, 2), "monthly_payment_yuan": round((debt_monthly_payment_cents(item) or 0) / 100, 2)} for item in debts],
+    }
+    fallback = {
+        "summary": f"当前有 {focus['open_count']} 项未完成事项，{len(projects)} 个进行中的项目；财务数据请以财务页的明细为准。",
+        "advice": ["先处理今日优先级最高的事项", "核对未来 7 天的现金与还款安排"],
+        "date": date.today().isoformat(),
+    }
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        return fallback
+    prompt = "请根据以下创业者经营数据生成一份极简中文早间经营简报。只输出 JSON，不要 Markdown：{\"summary\":\"不超过100字，概括财务安全、工作进展和最大风险\",\"advice\":[\"2-4条今天可执行建议，每条不超过30字\"]}。金额字段已经是人民币元，不要换算。数据：" + json.dumps(context, ensure_ascii=False)
+    payload = {"model": settings.deepseek_chat_model, "messages": [{"role": "system", "content": "你是创业者的经营顾问，只根据给定数据，不臆测金额。"}, {"role": "user", "content": prompt}], "temperature": 0.2}
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{settings.deepseek_base_url.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}, json=payload)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"].get("content") or ""
+            parsed = json.loads(content.strip().strip("`").removeprefix("json").strip())
+            summary = str(parsed.get("summary") or fallback["summary"])
+            advice = [str(item) for item in parsed.get("advice", []) if str(item).strip()][:4]
+            return {"summary": summary, "advice": advice or fallback["advice"], "date": date.today().isoformat()}
+    except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError):
+        return fallback
 
 
 def _extract_suggestions(content: str) -> tuple[str, list[str]]:

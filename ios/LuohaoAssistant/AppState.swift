@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
     @Published var dashboard: DashboardSummary?
     @Published var cashflow: [CashflowPoint] = []
     @Published var dailyFocus: DailyFocus?
+    @Published var morningBrief: MorningBrief?
     @Published var projects: [ProjectSummary] = []
     @Published var tasks: [FocusTask] = []
     @Published var accounts: [AccountSummary] = []
@@ -55,6 +56,7 @@ final class AppState: ObservableObject {
         dashboard = nil
         cashflow = []
         dailyFocus = nil
+        morningBrief = nil
         projects = []
         tasks = []
         accounts = []
@@ -78,6 +80,7 @@ final class AppState: ObservableObject {
             async let summary = api.dashboard()
             async let cashflowPoints = api.cashflow()
             async let focus = api.dailyFocus()
+            async let brief: MorningBrief? = try? await api.morningBrief()
             async let projectList = api.projects()
             async let taskList = api.tasks()
             async let accountList: [AccountSummary]? = try? await api.accounts()
@@ -90,6 +93,7 @@ final class AppState: ObservableObject {
             dashboard = try await summary
             cashflow = try await cashflowPoints
             dailyFocus = try await focus
+            morningBrief = await brief
             projects = try await projectList
             tasks = try await taskList
             let accountsValue = await accountList

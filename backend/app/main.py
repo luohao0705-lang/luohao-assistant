@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, debt_monthly_payment_cents, legacy_debt_transactions, legacy_monthly_payment_cents, legacy_payment_day, run_assistant, task_priority_score
+from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, debt_monthly_payment_cents, legacy_debt_transactions, legacy_monthly_payment_cents, legacy_payment_day, morning_brief, run_assistant, task_priority_score
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Account, AssistantAction, DecisionRecord, Debt, EventLog, Memory, Project, Task, TaskDependency, Transaction, WeeklyPlan
@@ -136,6 +136,11 @@ def cashflow(days: int = Query(default=90, ge=7, le=365), _: str = Depends(requi
 @app.get("/daily-focus")
 def daily_focus(_: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
     return daily_focus_snapshot(db)
+
+
+@app.get("/morning-brief")
+async def morning_brief_endpoint(_: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
+    return await morning_brief(db)
 
 
 @app.get("/finance/accounts")
@@ -462,6 +467,30 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
         db.add(item)
         db.flush()
         return {"transaction_id": item.id, "amount_cents": amount_cents, "kind": kind}
+    if action.action_type == "propose_debt_payment":
+        creditor = str(payload.get("creditor") or "").strip()
+        payment_cents = int(payload.get("payment_cents") or 0)
+        if not creditor or payment_cents <= 0:
+            raise HTTPException(status_code=422, detail="还款方案缺少债权人或有效金额")
+        debt = db.scalar(select(Debt).where(Debt.status == "open", Debt.creditor == creditor).order_by(Debt.id.desc()))
+        if not debt:
+            debt = db.scalar(select(Debt).where(Debt.status == "open", Debt.creditor.ilike(f"%{creditor}%")).order_by(Debt.id.desc()))
+        if not debt:
+            raise HTTPException(status_code=422, detail=f"没有找到待更新的债务：{creditor}")
+        new_outstanding = payload.get("new_outstanding_cents")
+        previous_outstanding = max(0, int(debt.outstanding_cents))
+        if payment_cents > previous_outstanding:
+            raise HTTPException(status_code=422, detail="还款金额不能超过当前债务余额")
+        calculated_outstanding = max(0, previous_outstanding - payment_cents)
+        if new_outstanding is not None and int(new_outstanding) != calculated_outstanding:
+            raise HTTPException(status_code=422, detail="还款金额与还款后的剩余债务不一致")
+        debt.outstanding_cents = calculated_outstanding
+        if debt.outstanding_cents == 0:
+            debt.status = "paid"
+        item = Transaction(kind="expense", amount_cents=payment_cents, occurred_on=date.fromisoformat(payload["occurred_on"]), status="confirmed", counterparty=creditor, note=payload.get("note") or "偿还债务")
+        db.add(item)
+        db.flush()
+        return {"debt_id": debt.id, "transaction_id": item.id, "payment_cents": payment_cents, "outstanding_cents": debt.outstanding_cents}
     if action.action_type == "propose_tasks":
         task_ids = [_create_task(task_data, db, payload.get("project_id")).id for task_data in payload.get("tasks", [])]
         return {"task_ids": task_ids, "count": len(task_ids)}

@@ -23,6 +23,12 @@ struct DashboardSummary: Decodable {
     }
 }
 
+struct MorningBrief: Decodable {
+    let summary: String
+    let advice: [String]
+    let date: String
+}
+
 struct CashflowPoint: Decodable, Identifiable {
     let date: String
     let balanceCents: Int
@@ -367,6 +373,7 @@ final class APIClient {
     func archiveMemory(_ id: Int) async throws { _ = try await authorizedAction(path: "memories/\(id)/archive", method: "POST") }
     func createDecision(_ payload: DecisionCreateRequest) async throws { try await post(path: "decisions", payload: payload) }
     func dailyFocus() async throws -> DailyFocus { try await authorized(path: "daily-focus") }
+    func morningBrief() async throws -> MorningBrief { try await authorized(path: "morning-brief") }
     func projects() async throws -> [ProjectSummary] { let response: ProjectListResponse = try await authorized(path: "projects"); return response.items }
     func createProject(_ payload: ProjectCreateRequest) async throws { try await post(path: "projects", payload: payload) }
     func updateProject(_ id: Int, _ payload: ProjectUpdateRequest) async throws { try await patch(path: "projects/\(id)", payload: payload) }

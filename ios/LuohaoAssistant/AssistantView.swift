@@ -45,6 +45,7 @@ struct AssistantView: View {
 
                 VStack(spacing: 0) {
                     assistantHeader
+                    morningBriefCard
 
                     ScrollViewReader { proxy in
                         ScrollView(.vertical) {
@@ -133,6 +134,30 @@ struct AssistantView: View {
         .padding(.vertical, 12)
         .background(Color(.secondarySystemGroupedBackground))
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    @ViewBuilder
+    private var morningBriefCard: some View {
+        if let brief = state.morningBrief {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 7) {
+                    Image(systemName: "sunrise.fill").foregroundStyle(.orange)
+                    Text("今日经营简报").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(brief.date).font(.caption2).foregroundStyle(.secondary)
+                }
+                Text(brief.summary).font(.subheadline).foregroundStyle(.primary)
+                ForEach(Array(brief.advice.enumerated()), id: \.offset) { index, advice in
+                    Label(advice, systemImage: "\(index + 1).circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
     }
 
     private var statusText: String {
@@ -556,6 +581,7 @@ struct AssistantView: View {
         [
             "propose_tasks": "新增事项方案",
             "propose_finance_entry": "登记财务记录",
+            "propose_debt_payment": "登记债务还款",
             "create_project_plan": "建立项目方案",
             "create_weekly_plan": "生成本周计划",
             "create_memory": "记录一条经营记忆",
@@ -573,6 +599,13 @@ struct AssistantView: View {
                 }
                 let label = kind == "income" ? "收入" : "支出"
                 return "\(label) \(String(format: "%.2f", cents / 100)) 元"
+            }
+            if let payment = object["payment_cents"], case .number(let cents) = payment {
+                let creditor = object["creditor"].flatMap { value -> String? in
+                    if case .string(let text) = value { return text }
+                    return nil
+                } ?? "债务"
+                return "偿还 \(creditor) \(String(format: "%.2f", cents / 100)) 元"
             }
             for key in ["name", "title", "objective", "next_action", "decision", "content"] {
                 if let item = object[key], case .string(let value) = item, !value.isEmpty { return value }
@@ -647,7 +680,7 @@ private struct AssistantMessageBubble: View {
         let normalized = message.text.replacingOccurrences(of: " ", with: "")
         let hasPendingTool = message.toolResults.contains { item in
             guard let name = item["name"], case .string(let value) = name else { return false }
-            return ["propose_finance_entry", "propose_tasks", "create_project_plan", "create_weekly_plan"].contains(value)
+            return ["propose_finance_entry", "propose_debt_payment", "propose_tasks", "create_project_plan", "create_weekly_plan"].contains(value)
         }
         return hasPendingTool || normalized.contains("确认此方案") ||
             normalized.contains("请回复“确认") ||
@@ -659,7 +692,7 @@ private struct AssistantMessageBubble: View {
         let normalized = message.text.replacingOccurrences(of: " ", with: "")
         let financeTerms = ["收入", "支出", "收款", "付款", "贷款", "债务", "账户", "金额", "元"]
         let isFinanceTool = message.toolResults.contains { item in
-            if let name = item["name"], case .string(let value) = name { return value == "propose_finance_entry" }
+            if let name = item["name"], case .string(let value) = name { return value == "propose_finance_entry" || value == "propose_debt_payment" }
             return false
         }
         let confirmLabel = isFinanceTool || financeTerms.contains(where: normalized.contains) ? "确认登记" : "确认执行"
