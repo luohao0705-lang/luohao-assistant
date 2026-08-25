@@ -131,7 +131,7 @@ struct FinanceView: View {
     private func metric(_ title: String, _ cents: Int, _ color: Color) -> some View {
         let displayedCents = title.contains("债") ? displayedOutstandingDebtCents : cents
         let footnote = title.contains("债") && fixedAssetOutstandingCents > 0 ? "完整合计 \(formatCurrency(fullOutstandingDebtCents))，含房贷、车贷" : nil
-        VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(currency.string(from: NSNumber(value: Double(displayedCents) / 100)) ?? "¥0")
                 .font(.title3.weight(.semibold)).monospacedDigit().foregroundStyle(color)
