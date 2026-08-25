@@ -93,8 +93,9 @@ struct DashboardView: View {
     @ViewBuilder private func hero(_ d: DashboardSummary) -> some View {
         let lowestForecast = currency.string(from: NSNumber(value: Double(d.forecastLowestBalanceCents) / 100)) ?? "-"
         VStack(alignment: .leading, spacing: 6) {
-            Text("先看现金，再决定行动").font(.subheadline).foregroundStyle(.secondary)
-            Text(d.cashRegistered ? (currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-") : "未登记").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
+            Text("已登记收入，债务单独计算").font(.subheadline).foregroundStyle(.secondary)
+            Text(currency.string(from: NSNumber(value: Double(d.registeredIncomeCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
+            Text("这是已确认登记收入累计值，还款不会从收入中扣除。").font(.caption).foregroundStyle(.secondary)
             if d.cashRegistered && d.forecastLowestBalanceCents < 0 {
                 let gap = currency.string(from: NSNumber(value: Double(-d.forecastLowestBalanceCents) / 100)) ?? "-"
                 Text("未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)；预计现金缺口为 \(gap)。")

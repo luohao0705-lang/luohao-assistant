@@ -223,6 +223,11 @@ def dashboard_snapshot(db: Session) -> dict:
     today = date.today()
     cash_cents = available_cash_cents(accounts, transactions)
     cash_registered = has_registered_cash(accounts, transactions)
+    registered_income_cents = sum(
+        item.amount_cents
+        for item in transactions
+        if item.kind == "income" and item.status in {"confirmed", "paid"}
+    )
     outstanding_debt_cents = sum(item.outstanding_cents for item in debts) + sum(item.amount_cents for item in legacy_debts)
     planned_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     planned_expense = sum(item.amount_cents for item in transactions if item.kind == "expense" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
@@ -249,7 +254,7 @@ def dashboard_snapshot(db: Session) -> dict:
     blocked_count = sum(1 for item in tasks if item.status == "blocked")
     if blocked_count:
         risk_flags.append(f"有待你处理的阻塞事项：{blocked_count} 项")
-    return {"cash_cents": cash_cents, "cash_registered": cash_registered, "outstanding_debt_cents": outstanding_debt_cents, "planned_income_cents": planned_income, "planned_expense_cents": planned_expense, "debt_due_30d_cents": due_soon, "overdue_income_cents": overdue_income, "forecast_lowest_balance_cents": lowest["balance_cents"], "forecast_lowest_date": lowest["date"], "active_projects": len(projects), "open_tasks": len(tasks), "blocked_tasks": blocked_count, "risk_flags": risk_flags}
+    return {"cash_cents": cash_cents, "cash_registered": cash_registered, "registered_income_cents": registered_income_cents, "outstanding_debt_cents": outstanding_debt_cents, "planned_income_cents": planned_income, "planned_expense_cents": planned_expense, "debt_due_30d_cents": due_soon, "overdue_income_cents": overdue_income, "forecast_lowest_balance_cents": lowest["balance_cents"], "forecast_lowest_date": lowest["date"], "active_projects": len(projects), "open_tasks": len(tasks), "blocked_tasks": blocked_count, "risk_flags": risk_flags}
 
 
 def dashboard_snapshot_for_ai(snapshot: dict) -> dict:
@@ -333,7 +338,7 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
             if is_planning else
             "当前是问答模式。此模式只允许查询和分析，不得创建、修改或登记任何数据；如果用户要求写入或做规划，请明确提示切换到规划模式。"
         )},
-        {"role": "system", "content": "经营数据中所有以 _yuan 结尾的金额均已换算为人民币元。必须按原值回答，不得再乘以 100，也不得把元解释为分。"},
+        {"role": "system", "content": "经营数据中所有以 _yuan 结尾的金额均已换算为人民币元。必须按原值回答，不得再乘以 100，也不得把元解释为分。registered_income_yuan 是已确认登记收入的累计值，只统计收入，不因还款或债务减少而减少；outstanding_debt_yuan 是未偿债务总额，两者必须分开解释。"},
     ]
     messages.append({"role": "system", "content": "Mobile chat formatting: reply in concise Simplified Chinese. Do not use Markdown emphasis markers such as ** or __, code fences, tables, or decorative separators. Use short paragraphs and the Chinese bullet character • when listing items. Keep headings as plain text without # symbols."})
     # The API is stateless, so the iOS client sends a bounded recent transcript.

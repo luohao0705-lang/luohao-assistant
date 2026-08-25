@@ -133,10 +133,10 @@ struct AssistantView: View {
             Spacer(minLength: 8)
             if let dashboard = state.dashboard {
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("可用现金")
+                    Text("已登记收入")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(currency(dashboard.cashCents))
+                    Text(currency(dashboard.registeredIncomeCents))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.primary)
                 }

@@ -69,7 +69,7 @@ struct FinanceView: View {
                     }
                     if let dashboard = state.dashboard {
                         HStack(spacing: 12) {
-                            metric("可用现金", dashboard.cashCents, .orange, placeholder: dashboard.cashRegistered ? nil : "未登记")
+                            metric("已登记收入", dashboard.registeredIncomeCents, .orange, note: "仅统计已确认收入，还款不会扣减")
                             metric("未偿债务", dashboard.outstandingDebtCents, .red)
                         }
                         HStack(spacing: 12) {
@@ -128,9 +128,9 @@ struct FinanceView: View {
         }
     }
 
-    private func metric(_ title: String, _ cents: Int, _ color: Color, placeholder: String? = nil) -> some View {
+    private func metric(_ title: String, _ cents: Int, _ color: Color, placeholder: String? = nil, note: String? = nil) -> some View {
         let displayedCents = title.contains("债") ? displayedOutstandingDebtCents : cents
-        let footnote = title.contains("债") && fixedAssetOutstandingCents > 0 ? "完整合计 \(formatCurrency(fullOutstandingDebtCents))，含房贷、车贷" : nil
+        let footnote = note ?? (title.contains("债") && fixedAssetOutstandingCents > 0 ? "完整合计 \(formatCurrency(fullOutstandingDebtCents))，含房贷、车贷" : nil)
         return VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(placeholder ?? (currency.string(from: NSNumber(value: Double(displayedCents) / 100)) ?? "¥0"))
