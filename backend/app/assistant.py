@@ -38,6 +38,25 @@ def tools_for_mode(mode: str) -> list[dict]:
     return READ_ONLY_TOOLS
 
 
+def forced_write_tool(text: str, mode: str) -> str | None:
+    """Force a write tool when the user's wording clearly records money.
+
+    DeepSeek may otherwise satisfy ``tool_choice=required`` with a read-only
+    call such as get_accounts, then produce a textual plan without creating an
+    AssistantAction. That leaves the UI with no real confirmation target.
+    """
+    if mode != "finance":
+        return None
+    normalized = re.sub(r"\s+", "", text)
+    repayment_markers = ("已还", "已经还", "还了", "还掉", "还清", "扣掉", "已扣", "扣款", "偿还", "还款")
+    if any(marker in normalized for marker in repayment_markers):
+        return "propose_debt_payment"
+    write_markers = ("登记", "记录", "记下", "添加", "加上", "到账", "收到了", "提现", "支出", "花了", "付了", "付款", "收入了", "进账", "转账")
+    if any(marker in normalized for marker in write_markers):
+        return "propose_finance_entry"
+    return None
+
+
 def legacy_debt_transactions(db: Session) -> list[Transaction]:
     """Return old debt entries that were recorded as ordinary expenses.
 
@@ -333,6 +352,7 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
     messages.extend(history_messages)
     messages.append({"role": "user", "content": text})
     available_tools = tools_for_mode(mode)
+    forced_tool = forced_write_tool(text, mode)
     # DeepSeek reasoner currently rejects function calling requests on some
     # deployments. Planning must be able to create a pending action, so use
     # the tool-capable chat model for both modes.
@@ -340,7 +360,7 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         "model": settings.deepseek_chat_model,
         "messages": messages,
         "tools": available_tools,
-        "tool_choice": "required" if is_planning else "auto",
+        "tool_choice": ({"type": "function", "function": {"name": forced_tool}} if forced_tool else ("required" if is_planning else "auto")),
     }
     tool_results = []
     headers = {"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}

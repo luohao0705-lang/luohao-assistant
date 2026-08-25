@@ -421,6 +421,10 @@ struct AssistantView: View {
                     ? fallbackSuggestions(for: response.reply)
                     : response.suggestions
                 messages.append(AssistantMessage(role: .assistant, text: response.reply, toolResults: response.toolResults, suggestions: suggestions))
+                // Load the confirmation queue immediately. A full dashboard
+                // refresh can fail on an unrelated endpoint and must not hide
+                // the action that the user needs to approve.
+                await state.refreshPendingActions()
                 await state.refreshDashboard()
             } catch is CancellationError {
                 return
@@ -642,7 +646,10 @@ private struct AssistantMessageBubble: View {
                 if !message.toolResults.isEmpty { toolTrace }
 
                 if let onSelectOption {
-                    let options = requiresConfirmation ? confirmationOptions : message.suggestions
+                    // Confirmation is rendered by the real pending-action
+                    // panel below the transcript. Do not present a chat chip
+                    // that can say "confirm" when no action exists.
+                    let options = requiresConfirmation ? [] : message.suggestions
                     if !options.isEmpty {
                         quickOptions(options, onSelectOption)
                     }
