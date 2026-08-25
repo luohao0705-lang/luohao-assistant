@@ -78,7 +78,7 @@ struct FinanceView: View {
                         }
                     }
 
-                    PageSectionHeader(title: "本月近期要还", detail: "只统计本月月供")
+                    PageSectionHeader(title: "近期要还", detail: "从今天起滚动计算，跨月也会显示")
                     paymentWindowSection
 
                     PageSectionHeader(title: "还款日历", detail: "点日期查看当天应还")
@@ -129,10 +129,19 @@ struct FinanceView: View {
     }
 
     private func metric(_ title: String, _ cents: Int, _ color: Color) -> some View {
+        let displayedCents = title.contains("债") ? displayedOutstandingDebtCents : cents
+        let footnote = title.contains("债") && fixedAssetOutstandingCents > 0 ? "完整合计 \(formatCurrency(fullOutstandingDebtCents))，含房贷、车贷" : nil
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(currency.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0")
+            Text(currency.string(from: NSNumber(value: Double(displayedCents) / 100)) ?? "¥0")
                 .font(.title3.weight(.semibold)).monospacedDigit().foregroundStyle(color)
+            if let footnote {
+                Text(footnote)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -277,14 +286,20 @@ struct FinanceView: View {
     private var monthlyPaymentItems: [MonthlyPaymentItem] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let endOfMonth = calendar.dateInterval(of: .month, for: today)?.end ?? today
-        return state.debts.compactMap { debt in
-            guard debt.outstandingCents > 0, let paymentCents = debt.monthlyPaymentCents, paymentCents > 0 else { return nil }
+        let horizon = calendar.date(byAdding: .day, value: 30, to: today) ?? today
+        let months = [
+            calendar.date(from: DateComponents(year: calendar.component(.year, from: today), month: calendar.component(.month, from: today), day: 1))!,
+            calendar.date(byAdding: .month, value: 1, to: today)!
+        ]
+        return state.debts.flatMap { debt -> [MonthlyPaymentItem] in
+            guard debt.outstandingCents > 0, let paymentCents = debt.monthlyPaymentCents, paymentCents > 0 else { return [] }
             let day = debt.paymentDay ?? parseDate(debt.dueOn).map { calendar.component(.day, from: $0) }
-            guard let day else { return nil }
-            let date = calendar.date(from: DateComponents(year: calendar.component(.year, from: today), month: calendar.component(.month, from: today), day: min(day, calendar.range(of: .day, in: .month, for: today)?.count ?? day)))!
-            guard date >= today && date < endOfMonth else { return nil }
-            return MonthlyPaymentItem(debt: debt, date: date, paymentCents: paymentCents)
+            guard let day else { return [] }
+            return months.compactMap { monthStart in
+                let maxDay = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? day
+                guard let date = calendar.date(from: DateComponents(year: calendar.component(.year, from: monthStart), month: calendar.component(.month, from: monthStart), day: min(day, maxDay))), date >= today, date <= horizon else { return nil }
+                return MonthlyPaymentItem(debt: debt, date: date, paymentCents: paymentCents)
+            }
         }
         .sorted { $0.date == $1.date ? $0.debt.creditor < $1.debt.creditor : $0.date < $1.date }
     }
@@ -370,6 +385,13 @@ struct FinanceView: View {
                                         Text("\(group.debts.count) 笔债务 · 本金 \(formatCurrency(group.principalCents))")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
+                                        if group.fixedAssetCents > 0 {
+                                            Text("完整合计 \(formatCurrency(group.fullOutstandingCents))，含房贷、车贷")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.8)
+                                        }
                                     }
                                     Spacer()
                                     Text(formatCurrency(group.outstandingCents))
@@ -463,7 +485,12 @@ struct FinanceView: View {
         var id: String { owner }
         var creditor: String { owner }
         var principalCents: Int { debts.reduce(0) { $0 + $1.principalCents } }
-        var outstandingCents: Int { debts.reduce(0) { $0 + $1.outstandingCents } }
+        var fullOutstandingCents: Int { debts.reduce(0) { $0 + $1.outstandingCents } }
+        var fixedAssetCents: Int {
+            debts.filter { $0.creditor.contains("房贷") || $0.creditor.contains("车贷") }
+                .reduce(0) { $0 + $1.outstandingCents }
+        }
+        var outstandingCents: Int { max(0, fullOutstandingCents - fixedAssetCents) }
         var earliestDue: Date? {
             let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
             return debts.compactMap { $0.dueOn.flatMap { formatter.date(from: $0) } }.min()
@@ -477,6 +504,20 @@ struct FinanceView: View {
     }
 
     private var creditorGroups: [OwnerGroup] { ownerGroups }
+
+    private var fullOutstandingDebtCents: Int {
+        state.debts.filter { $0.outstandingCents > 0 }.reduce(0) { $0 + $1.outstandingCents }
+    }
+
+    private var fixedAssetOutstandingCents: Int {
+        state.debts.filter { debt in
+            debt.outstandingCents > 0 && (debt.creditor.contains("房贷") || debt.creditor.contains("车贷"))
+        }.reduce(0) { $0 + $1.outstandingCents }
+    }
+
+    private var displayedOutstandingDebtCents: Int {
+        max(0, fullOutstandingDebtCents - fixedAssetOutstandingCents)
+    }
 
     private func ownerName(for debt: DebtSummary) -> String {
         let text = debt.note ?? ""
