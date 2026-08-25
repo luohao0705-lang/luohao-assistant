@@ -95,9 +95,16 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("先看现金，再决定行动").font(.subheadline).foregroundStyle(.secondary)
             Text(currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
-            Text(d.forecastLowestBalanceCents < 0 ? "未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)；预计现金缺口为 \(currency.string(from: NSNumber(value: Double(-d.forecastLowestBalanceCents) / 100)) ?? \"-\")。" : "未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)。")
-                .font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
-            Text("当前可用现金 · 预测最低 \(lowestForecast) · \(d.forecastLowestDate)").font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
+            if d.forecastLowestBalanceCents < 0 {
+                let gap = currency.string(from: NSNumber(value: Double(-d.forecastLowestBalanceCents) / 100)) ?? "-"
+                Text("未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)；预计现金缺口为 \(gap)。")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            } else {
+                Text("未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
