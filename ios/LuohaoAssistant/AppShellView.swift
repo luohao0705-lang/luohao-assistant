@@ -375,7 +375,7 @@ private struct DebtCalendarSection: View {
                 Circle().fill(hasDebt ? LuohaoDesign.accent : .clear).frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity, minHeight: 34)
-            .foregroundStyle(inMonth ? (isSelected ? .white : .primary) : .tertiary)
+            .foregroundStyle(inMonth ? (isSelected ? Color.white : Color.primary) : Color.secondary.opacity(0.45))
             .background(isSelected ? LuohaoDesign.accent : (isToday ? LuohaoDesign.accentTint : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
