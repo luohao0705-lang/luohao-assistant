@@ -20,6 +20,20 @@ final class VoiceInput: NSObject, ObservableObject {
         start()
     }
 
+    func startRecording() async {
+        guard !isRecording else { return }
+        errorMessage = nil
+        guard await requestPermissions() else {
+            errorMessage = "需要允许麦克风和语音识别权限，才能使用语音交代"
+            return
+        }
+        start()
+    }
+
+    func stopRecording() {
+        if isRecording { stop() }
+    }
+
     private func requestPermissions() async -> Bool {
         let speech = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in continuation.resume(returning: status == .authorized) }
@@ -31,6 +45,10 @@ final class VoiceInput: NSObject, ObservableObject {
     private func start() {
         task?.cancel()
         request = SFSpeechAudioBufferRecognitionRequest()
+        transcript = ""
+        if #available(iOS 16.0, *) {
+            request?.addsPunctuation = true
+        }
         guard let request, let recognizer, recognizer.isAvailable else { errorMessage = "语音识别服务暂时不可用"; return }
         do {
             let session = AVAudioSession.sharedInstance()

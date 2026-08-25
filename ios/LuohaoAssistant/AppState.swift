@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     @Published var weeklyPlan: WeeklyPlan?
     @Published var pendingActions: [AssistantAction] = []
     @Published var errorMessage: String?
+    @Published private(set) var connectionHealthy: Bool?
     @Published var isLoading = false
     @Published var biometricEnabled: Bool {
         didSet { UserDefaults.standard.set(biometricEnabled, forKey: "luohao.biometricEnabled") }
@@ -65,6 +66,7 @@ final class AppState: ObservableObject {
         knowledgeDataUnavailable = false
         weeklyPlan = nil
         pendingActions = []
+        connectionHealthy = nil
         isAuthenticated = false
     }
 
@@ -105,12 +107,17 @@ final class AppState: ObservableObject {
             decisions = decisionsValue ?? []
             weeklyPlan = try await plan.item
             pendingActions = try await actions
+            connectionHealthy = true
         } catch let error as APIError {
             if case .unauthorized = error {
                 logout()
             }
             errorMessage = error.localizedDescription
-        } catch { errorMessage = error.localizedDescription }
+            connectionHealthy = false
+        } catch {
+            errorMessage = error.localizedDescription
+            connectionHealthy = false
+        }
     }
 
     /// Refresh only the confirmation queue. This stays usable even when an
@@ -118,8 +125,10 @@ final class AppState: ObservableObject {
     func refreshPendingActions() async {
         do {
             pendingActions = try await api.pendingActions()
+            connectionHealthy = true
         } catch {
             errorMessage = error.localizedDescription
+            connectionHealthy = false
         }
     }
 

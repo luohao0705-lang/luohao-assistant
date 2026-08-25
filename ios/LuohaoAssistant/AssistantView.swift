@@ -28,12 +28,12 @@ struct AssistantView: View {
     @State private var messages: [AssistantMessage] = [
         AssistantMessage(
             role: .assistant,
-            text: "告诉我你要推进什么，或者想了解哪一项现金与风险。\n\n你可以直接说：帮我安排今天最重要的三件事。",
-            suggestions: ["看现金风险", "安排今天三件事", "拆解一个项目"]
+            text: "现在进入规划模式。告诉我你要推进的项目、事项或财务登记，我会先整理成待确认方案。",
+            suggestions: ["安排今天最重要的三件事", "登记一笔收入", "拆解一个项目"]
         )
     ]
     @State private var text = ""
-    @State private var mode = "chat"
+    @State private var mode = "plan"
     @State private var isSending = false
     @State private var lastPrompt = ""
     @State private var requestTask: Task<Void, Never>?
@@ -54,7 +54,7 @@ struct AssistantView: View {
                                         message: message,
                                         onRetry: message.isError ? retry : nil,
                                         onSelectOption: message.role == .assistant && isLatestAssistant(message) && !isSending ? { option in
-                                            send(promptOverride: option)
+                                            handleQuickOption(option)
                                         } : nil
                                     )
                                     .id(message.id)
@@ -136,17 +136,20 @@ struct AssistantView: View {
     }
 
     private var statusText: String {
-        if state.errorMessage != nil { return "连接需要检查" }
-        if state.isLoading { return "正在同步经营数据" }
+        if state.isLoading { return "正在检查连接" }
+        if state.connectionHealthy == false { return "连接需要检查" }
+        if state.dashboard == nil { return "等待同步" }
         if let dashboard = state.dashboard {
             let count = state.pendingActions.count
-            return count > 0 ? "已连接 · \(count) 项待确认" : "已连接 · 今日 \(dashboard.openTasks) 项待办"
+            return count > 0 ? "连接正常 · \(count) 项待确认" : "连接正常 · 今日 \(dashboard.openTasks) 项待办"
         }
-        return "已连接，等待你的交代"
+        return "等待同步"
     }
 
     private var statusColor: Color {
-        state.errorMessage == nil ? .green : .red
+        if state.isLoading { return .orange }
+        if state.connectionHealthy == false { return .red }
+        return .green
     }
 
     private var thinkingRow: some View {
@@ -313,6 +316,13 @@ struct AssistantView: View {
                     }
                     .submitLabel(.send)
                     .onSubmit { send() }
+                    .onLongPressGesture(minimumDuration: 0.35, pressing: { pressing in
+                        if pressing {
+                            Task { await voice.startRecording() }
+                        } else {
+                            voice.stopRecording()
+                        }
+                    }, perform: {})
 
                 Button {
                     if isSending { stopRequest() } else { send() }
@@ -402,6 +412,56 @@ struct AssistantView: View {
             }
             isSending = false
             requestTask = nil
+        }
+    }
+
+    private func handleQuickOption(_ option: String) {
+        if ["确认登记", "确认执行", "确认方案"].contains(option) {
+            resolveLatestPendingAction()
+        } else if option == "修改方案" {
+            reviseLatestPendingAction()
+        } else {
+            send(promptOverride: option)
+        }
+    }
+
+    private func resolveLatestPendingAction() {
+        guard !isSending else { return }
+        messages.append(AssistantMessage(role: .user, text: "确认执行"))
+        isSending = true
+        requestTask = Task {
+            await state.refreshPendingActions()
+            guard !Task.isCancelled else { return }
+            if let action = state.pendingActions.first, state.pendingActions.count == 1 {
+                let confirmed = await state.resolveAction(action, confirm: true)
+                if !Task.isCancelled {
+                    messages.append(AssistantMessage(role: .assistant, text: confirmed
+                        ? "已确认执行，数据已经写入并同步到总览。"
+                        : "确认失败：\(state.errorMessage ?? "服务器没有完成写入，请稍后重试。")", isError: !confirmed))
+                }
+            } else {
+                messages.append(AssistantMessage(role: .assistant, text: state.pendingActions.isEmpty
+                    ? "目前没有等待确认的方案。"
+                    : "当前有多份待确认方案，请点击对应方案的确认按钮。"))
+            }
+            isSending = false
+            requestTask = nil
+        }
+    }
+
+    private func reviseLatestPendingAction() {
+        guard !isSending else { return }
+        messages.append(AssistantMessage(role: .user, text: "修改方案"))
+        isSending = true
+        requestTask = Task {
+            await state.refreshPendingActions()
+            if let action = state.pendingActions.first, state.pendingActions.count == 1 {
+                _ = await state.resolveAction(action, confirm: false)
+            }
+            guard !Task.isCancelled else { return }
+            isSending = false
+            requestTask = nil
+            send(promptOverride: "我想修改刚才的方案，请基于原方案直接给我一版修订后的待确认方案。")
         }
     }
 
@@ -554,9 +614,7 @@ private struct AssistantMessageBubble: View {
                 if !message.toolResults.isEmpty { toolTrace }
 
                 if let onSelectOption {
-                    let options = message.suggestions.isEmpty && requiresConfirmation
-                        ? confirmationOptions
-                        : message.suggestions
+                    let options = requiresConfirmation ? confirmationOptions : message.suggestions
                     if !options.isEmpty {
                         quickOptions(options, onSelectOption)
                     }
@@ -582,7 +640,11 @@ private struct AssistantMessageBubble: View {
 
     private var requiresConfirmation: Bool {
         let normalized = message.text.replacingOccurrences(of: " ", with: "")
-        return normalized.contains("确认此方案") ||
+        let hasPendingTool = message.toolResults.contains { item in
+            guard let name = item["name"], case .string(let value) = name else { return false }
+            return ["propose_finance_entry", "propose_tasks", "create_project_plan", "create_weekly_plan"].contains(value)
+        }
+        return hasPendingTool || normalized.contains("确认此方案") ||
             normalized.contains("请回复“确认") ||
             normalized.contains("请回复\"确认") ||
             normalized.contains("确认后，我会立即正式写入")
@@ -591,7 +653,11 @@ private struct AssistantMessageBubble: View {
     private var confirmationOptions: [String] {
         let normalized = message.text.replacingOccurrences(of: " ", with: "")
         let financeTerms = ["收入", "支出", "收款", "付款", "贷款", "债务", "账户", "金额", "元"]
-        let confirmLabel = financeTerms.contains(where: normalized.contains) ? "确认登记" : "确认执行"
+        let isFinanceTool = message.toolResults.contains { item in
+            if let name = item["name"], case .string(let value) = name { return value == "propose_finance_entry" }
+            return false
+        }
+        let confirmLabel = isFinanceTool || financeTerms.contains(where: normalized.contains) ? "确认登记" : "确认执行"
         return [confirmLabel, "修改方案"]
     }
 

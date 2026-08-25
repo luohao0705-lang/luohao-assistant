@@ -11,15 +11,12 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if let d = state.dashboard {
+                if state.dashboard != nil {
                     VStack(alignment: .leading, spacing: 20) {
-                        hero(d)
-                        cashflowSection
                         dailySection
                         projectSection
                         weeklySection
                         if !state.pendingActions.isEmpty { actionSection }
-                        if !d.riskFlags.isEmpty { riskSection(d.riskFlags) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
