@@ -47,7 +47,8 @@ struct FinanceView: View {
     @State private var selectedTransaction: TransactionSummary?
     @State private var selectedDebt: DebtSummary?
     @State private var selectedDueDate: Date?
-    @State private var selectedPaymentWindow: Int?
+    @State private var selectedPaymentWindow: Int? = 7
+    @State private var expandedOwner: String?
     private let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -77,6 +78,9 @@ struct FinanceView: View {
                         }
                     }
 
+                    PageSectionHeader(title: "本月近期要还", detail: "只统计本月月供")
+                    paymentWindowSection
+
                     PageSectionHeader(title: "还款日历", detail: "点日期查看当天应还")
                     if state.debts.isEmpty {
                         empty("还没有债务记录", message: "通过语音告诉助理债权人、金额和还款日期。", icon: "calendar")
@@ -84,11 +88,8 @@ struct FinanceView: View {
                         DebtCalendarSection(debts: state.debts, selectedDate: $selectedDueDate)
                     }
 
-                    PageSectionHeader(title: "本月近期要还", detail: "只统计本月月供")
-                    paymentWindowSection
-
-                    PageSectionHeader(title: "按人查看", detail: "每位债权人的未偿金额")
-                    creditorSection
+                    PageSectionHeader(title: "按人查看", detail: "每位归属人的未偿金额")
+                    ownerSection
 
                     if state.debts.contains(where: { $0.outstandingCents > 0 && $0.dueOn == nil }) {
                         Label("有 \(state.debts.filter { $0.outstandingCents > 0 && $0.dueOn == nil }.count) 笔债务尚未设置还款日期", systemImage: "exclamationmark.circle")
@@ -349,6 +350,82 @@ struct FinanceView: View {
         }
     }
 
+    private var ownerSection: some View {
+        let groups = ownerGroups
+        return Group {
+            if groups.isEmpty {
+                empty("暂无债务归属人", message: "每笔债务保存后会按登记信息归类。", icon: "person.2")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(groups) { group in
+                        VStack(alignment: .leading, spacing: 9) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    expandedOwner = expandedOwner == group.owner ? nil : group.owner
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(group.owner).font(.headline)
+                                        Text("\(group.debts.count) 笔债务 · 本金 \(formatCurrency(group.principalCents))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(formatCurrency(group.outstandingCents))
+                                        .font(.headline.weight(.semibold))
+                                        .monospacedDigit()
+                                    Image(systemName: expandedOwner == group.owner ? "chevron.up" : "chevron.down")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if expandedOwner == group.owner {
+                                VStack(spacing: 0) {
+                                    ForEach(group.debts) { debt in
+                                        Button {
+                                            if debt.id > 0 { selectedDebt = debt }
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                VStack(alignment: .leading, spacing: 3) {
+                                                    Text(debt.creditor).font(.subheadline.weight(.medium))
+                                                    Text(debt.monthlyPaymentCents.map { "月供 \(formatCurrency($0))" } ?? "月供未记录")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Spacer()
+                                                Text(formatCurrency(debt.outstandingCents))
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .monospacedDigit()
+                                                if debt.id > 0 {
+                                                    Image(systemName: "chevron.right")
+                                                        .font(.caption.weight(.semibold))
+                                                        .foregroundStyle(.tertiary)
+                                                }
+                                            }
+                                            .contentShape(Rectangle())
+                                            .padding(.vertical, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                        if debt.id != group.debts.last?.id { Divider() }
+                                    }
+                                }
+                                .padding(.top, 2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 11)
+                        if group.id != groups.last?.id { Divider() }
+                    }
+                }
+                .surfaceCard(padding: 12, radius: 14)
+            }
+        }
+    }
+
     @ViewBuilder private var accountAndTransactionSection: some View {
         if state.accounts.isEmpty && state.transactions.isEmpty {
             empty("还没有账户或流水", message: "账户、收入和支出会在这里按来源整理。", icon: "list.bullet.rectangle")
@@ -380,10 +457,11 @@ struct FinanceView: View {
         }
     }
 
-    private struct CreditorGroup: Identifiable {
-        let creditor: String
+    private struct OwnerGroup: Identifiable {
+        let owner: String
         let debts: [DebtSummary]
-        var id: String { creditor }
+        var id: String { owner }
+        var creditor: String { owner }
         var principalCents: Int { debts.reduce(0) { $0 + $1.principalCents } }
         var outstandingCents: Int { debts.reduce(0) { $0 + $1.outstandingCents } }
         var earliestDue: Date? {
@@ -392,10 +470,20 @@ struct FinanceView: View {
         }
     }
 
-    private var creditorGroups: [CreditorGroup] {
-        Dictionary(grouping: state.debts.filter { $0.outstandingCents > 0 }, by: { $0.creditor })
-            .map { CreditorGroup(creditor: $0.key, debts: $0.value.sorted { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") }) }
+    private var ownerGroups: [OwnerGroup] {
+        Dictionary(grouping: state.debts.filter { $0.outstandingCents > 0 }, by: ownerName(for:))
+            .map { OwnerGroup(owner: $0.key, debts: $0.value.sorted { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") }) }
             .sorted { $0.outstandingCents > $1.outstandingCents }
+    }
+
+    private var creditorGroups: [OwnerGroup] { ownerGroups }
+
+    private func ownerName(for debt: DebtSummary) -> String {
+        let text = debt.note ?? ""
+        if text.contains("老婆") { return "老婆" }
+        if text.contains("合伙人") { return "合伙人" }
+        if text.contains("父亲") || text.contains("爸爸") { return "父亲" }
+        return "未分类"
     }
 
     private func parseDate(_ value: String?) -> Date? {
