@@ -5,6 +5,10 @@ struct LoginView: View {
     @State private var password = ""
     @FocusState private var passwordFocused: Bool
 
+    private var isPINComplete: Bool {
+        password.utf8.count == 2 && password.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
+    }
+
     var body: some View {
         ZStack {
             LuohaoDesign.canvas.ignoresSafeArea()
@@ -75,8 +79,11 @@ struct LoginView: View {
                 }
                 .onSubmit { signIn() }
                 .onChange(of: password) { _, newValue in
-                    let digits = newValue.filter(\.isNumber)
-                    password = String(digits.prefix(2))
+                    let digits = newValue.utf8
+                        .filter { $0 >= 48 && $0 <= 57 }
+                        .prefix(2)
+                    let normalized = String(decoding: digits, as: UTF8.self)
+                    if normalized != newValue { password = normalized }
                 }
 
             Button(action: signIn) {
@@ -85,7 +92,7 @@ struct LoginView: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
             .controlSize(.large)
-            .disabled(password.count != 2 || state.isLoading)
+            .disabled(!isPINComplete || state.isLoading)
 
             if let error = state.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -105,7 +112,7 @@ struct LoginView: View {
     }
 
     private func signIn() {
-        guard password.count == 2, password.allSatisfy(\.isNumber) else { return }
+        guard isPINComplete else { return }
         passwordFocused = false
         Task { await state.login(password: password) }
     }
