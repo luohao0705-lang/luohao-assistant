@@ -294,6 +294,7 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
         )},
         {"role": "system", "content": "经营数据中所有以 _yuan 结尾的金额均已换算为人民币元。必须按原值回答，不得再乘以 100，也不得把元解释为分。"},
     ]
+    messages.append({"role": "system", "content": "Mobile chat formatting: reply in concise Simplified Chinese. Do not use Markdown emphasis markers such as ** or __, code fences, tables, or decorative separators. Use short paragraphs and the Chinese bullet character • when listing items. Keep headings as plain text without # symbols."})
     # The API is stateless, so the iOS client sends a bounded recent transcript.
     # Keep only valid roles and cap characters to prevent a long chat from crowding out financial context.
     history_messages: list[dict] = []

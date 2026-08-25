@@ -624,7 +624,7 @@ private struct AssistantMessageBubble: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text(message.text)
+                AssistantRichText(text: message.text)
                     .font(.body)
                     .foregroundStyle(message.role == .user ? .white : .primary)
                     .multilineTextAlignment(.leading)
@@ -751,5 +751,44 @@ private struct AssistantMessageBubble: View {
             }
         }
         .frame(maxWidth: 380, alignment: .leading)
+    }
+}
+
+private struct AssistantRichText: View {
+    let text: String
+
+    var body: some View {
+        if let attributed = try? AttributedString(markdown: normalizedText, options: .init(interpretedSyntax: .full)) {
+            Text(attributed)
+        } else {
+            Text(plainFallback)
+        }
+    }
+
+    private var normalizedText: String {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var plainFallback: String {
+        normalizedText
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line in
+                let value = String(line)
+                    .replacingOccurrences(of: #"^\s*#{1,6}\s*"#, with: "", options: .regularExpression)
+                if value.trimmingCharacters(in: .whitespaces).hasPrefix("* ") {
+                    return value.replacingOccurrences(of: "* ", with: "• ", options: [], range: value.range(of: "* "))
+                }
+                if value.trimmingCharacters(in: .whitespaces).hasPrefix("- ") {
+                    return value.replacingOccurrences(of: "- ", with: "• ", options: [], range: value.range(of: "- "))
+                }
+                return value
+            }
+            .joined(separator: "\n")
     }
 }
