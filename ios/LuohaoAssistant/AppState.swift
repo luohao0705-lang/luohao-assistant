@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class AppState: ObservableObject {
     @Published var isAuthenticated = false
+    @Published var biometricLocked = false
     @Published var dashboard: DashboardSummary?
     @Published var cashflow: [CashflowPoint] = []
     @Published var dailyFocus: DailyFocus?
@@ -22,20 +23,47 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var connectionHealthy: Bool?
     @Published var isLoading = false
-    @Published var biometricEnabled: Bool {
-        didSet { UserDefaults.standard.set(biometricEnabled, forKey: "luohao.biometricEnabled") }
-    }
+    // This app is intentionally single-user and always requires Face ID when
+    // returning from the background. Keep the property for compatibility with
+    // existing settings data, but do not allow it to disable the lock.
+    @Published private(set) var biometricEnabled = true
     let api = APIClient.shared
+    private var biometricInProgress = false
 
     init() {
-        biometricEnabled = UserDefaults.standard.object(forKey: "luohao.biometricEnabled") as? Bool ?? true
+        biometricEnabled = true
     }
 
     func restoreSession() async {
-        guard api.token != nil else { return }
-        if biometricEnabled {
-            guard await BiometricGate.authenticate() else { return }
+        guard api.token != nil else {
+            biometricLocked = false
+            return
         }
+        await unlockWithBiometrics()
+    }
+
+    func lockForBackground() {
+        guard api.token != nil else { return }
+        isAuthenticated = false
+        biometricLocked = true
+    }
+
+    func unlockForForeground() async {
+        guard api.token != nil, !isAuthenticated else { return }
+        await unlockWithBiometrics()
+    }
+
+    private func unlockWithBiometrics() async {
+        guard api.token != nil, !isAuthenticated, !biometricInProgress else { return }
+        biometricInProgress = true
+        biometricLocked = true
+        defer { biometricInProgress = false }
+        guard await BiometricGate.authenticate() else {
+            isAuthenticated = false
+            biometricLocked = true
+            return
+        }
+        biometricLocked = false
         isAuthenticated = true
         await refreshDashboard()
     }
@@ -46,6 +74,7 @@ final class AppState: ObservableObject {
         defer { isLoading = false }
         do {
             try await api.login(password: password)
+            biometricLocked = false
             isAuthenticated = true
             await refreshDashboard()
         } catch { errorMessage = error.localizedDescription }
@@ -69,6 +98,7 @@ final class AppState: ObservableObject {
         weeklyPlan = nil
         pendingActions = []
         connectionHealthy = nil
+        biometricLocked = false
         isAuthenticated = false
     }
 

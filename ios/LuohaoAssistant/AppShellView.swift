@@ -1169,9 +1169,10 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("安全") {
-                    Toggle(isOn: $state.biometricEnabled) {
-                        Label("Face ID 解锁", systemImage: "faceid")
-                    }
+                    Label("每次进入都需要 Face ID", systemImage: "faceid")
+                    Text("离开 App 后再次打开，必须完成面容验证才能查看经营数据。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     Button("退出登录", role: .destructive) { state.logout() }
                 }
                 Section("连接") {
