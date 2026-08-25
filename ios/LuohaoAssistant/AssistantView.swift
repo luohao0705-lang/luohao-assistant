@@ -159,7 +159,7 @@ struct AssistantView: View {
                 Text("洛浩助理").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small).tint(.orange)
-                    Text(mode == "plan" ? "正在整理执行路径…" : "正在核对你的经营情况…")
+                    Text(mode == "plan" ? "正在整理执行路径…" : mode == "finance" ? "正在核对财务信息…" : "正在核对你的经营情况…")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -247,6 +247,7 @@ struct AssistantView: View {
             HStack(spacing: 10) {
                 Picker("模式", selection: $mode) {
                     Text("问答").tag("chat")
+                    Text("财务").tag("finance")
                     Text("规划").tag("plan")
                 }
                 .pickerStyle(.segmented)
@@ -277,7 +278,7 @@ struct AssistantView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(mode == "plan" ? "生成方案前会先征求确认" : "只读分析，不会写入数据")
+                        Text(mode == "plan" ? "生成方案前会先征求确认" : mode == "finance" ? "财务写入前会先征求确认" : "只读分析，不会写入数据")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -355,11 +356,15 @@ struct AssistantView: View {
         messages = [AssistantMessage(
             role: .assistant,
             text: newMode == "plan"
-                ? "现在进入规划模式。告诉我你要推进的项目、事项或财务登记，我会先整理成待确认方案。"
-                : "现在进入问答模式。你可以查询现金、债务、项目、任务和经营风险；此模式不会写入数据。",
+                ? "现在进入规划模式。告诉我你要推进的项目或事项，我会先整理成待确认方案。"
+                : newMode == "finance"
+                    ? "现在进入财务模式。告诉我收入、支出、债务或账户变动，我会先整理成待确认登记。"
+                    : "现在进入问答模式。你可以查询现金、债务、项目、任务和经营风险；此模式不会写入数据。",
             suggestions: newMode == "plan"
-                ? ["安排今天最重要的三件事", "登记一笔收入", "拆解一个项目"]
-                : ["查看现金风险", "查看今天重点", "查看当前债务"]
+                ? ["安排今天最重要的三件事", "拆解一个项目", "生成本周计划"]
+                : newMode == "finance"
+                    ? ["登记一笔收入", "登记一笔支出", "登记一笔债务"]
+                    : ["查看现金风险", "查看今天重点", "查看当前债务"]
         )]
     }
 

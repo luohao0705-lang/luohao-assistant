@@ -6,6 +6,7 @@ struct DashboardView: View {
     @State private var showingAssistant = false
     @State private var selectedProject: ProjectSummary?
     @State private var showingWeeklyPlan = false
+    @State private var selectedPlanningWindow = 7
     private var currency: NumberFormatter { let f = NumberFormatter(); f.numberStyle = .currency; f.currencyCode = "CNY"; return f }
 
     var body: some View {
@@ -14,6 +15,7 @@ struct DashboardView: View {
                 if state.dashboard != nil {
                     VStack(alignment: .leading, spacing: 20) {
                         dailySection
+                        planningWindowSection
                         projectSection
                         weeklySection
                         if !state.pendingActions.isEmpty { actionSection }
@@ -79,7 +81,8 @@ struct DashboardView: View {
     private var dailySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("今天最重要的三件事", detail: state.dailyFocus.map { "待办 \($0.openCount) · 逾期 \($0.overdueCount)" })
-            if let focus = state.dailyFocus?.focus, !focus.isEmpty {
+            let focus = (state.dailyFocus?.focus ?? []).filter { !isFinancialTask($0) }
+            if !focus.isEmpty {
                 ForEach(focus) { task in
                     HStack(spacing: 12) {
                         Button { Task { await complete(task) } } label: { Image(systemName: task.status == "done" ? "checkmark.circle.fill" : "circle").foregroundStyle(task.status == "done" ? .green : .secondary) }.buttonStyle(.borderless).accessibilityLabel(task.status == "done" ? "已完成" : "标记完成")
@@ -93,6 +96,73 @@ struct DashboardView: View {
             if let blocked = state.dailyFocus?.blocked, !blocked.isEmpty { Divider(); Label("\(blocked.count) 项被阻塞：\(blocked[0].reason)", systemImage: "exclamationmark.triangle").font(.subheadline).foregroundStyle(.orange) }
         }
         .surfaceCard(padding: 16)
+    }
+
+    private var planningWindowSection: some View {
+        let windows = [3, 7, 30]
+        let items = planningItems(for: selectedPlanningWindow)
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("近期规划", detail: "按事项截止日期")
+            HStack(spacing: 8) {
+                ForEach(windows, id: \.self) { days in
+                    let count = planningItems(for: days).count
+                    Button { selectedPlanningWindow = days } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(days == 30 ? "近1个月" : "近\(days)天")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Text("\(count) 件")
+                                .font(.headline.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(count > 0 ? .orange : .primary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .background(selectedPlanningWindow == days ? LuohaoDesign.accentTint : LuohaoDesign.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(selectedPlanningWindow == days ? LuohaoDesign.accent.opacity(0.45) : LuohaoDesign.hairline, lineWidth: 1) }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if items.isEmpty {
+                Text("这段时间没有已安排截止日期的事项")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(items.prefix(5)) { task in
+                    HStack(spacing: 9) {
+                        Circle().fill(task.status == "done" ? .green : .orange).frame(width: 7, height: 7)
+                        Text(task.title).font(.subheadline).lineLimit(1)
+                        Spacer()
+                        Text(task.dueOn ?? "")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .surfaceCard(padding: 16)
+    }
+
+    private func planningItems(for days: Int) -> [FocusTask] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return state.tasks
+            .filter { task in
+                guard !isFinancialTask(task), task.status != "done", let dueOn = task.dueOn,
+                      let dueDate = date(from: dueOn) else { return false }
+                let distance = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: dueDate)).day ?? 999
+                return distance >= 0 && distance <= days
+            }
+            .sorted { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") }
+    }
+
+    private func date(from value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.date(from: value)
     }
 
     private func complete(_ task: FocusTask) async {
@@ -114,7 +184,7 @@ struct DashboardView: View {
     }
 
     private var weeklySection: some View {
-        VStack(alignment: .leading, spacing: 8) { sectionTitle("本周计划", detail: state.weeklyPlan?.weekStart ?? "尚未安排"); if let plan = state.weeklyPlan { if let theme = plan.theme { Text(theme).font(.headline) }; ForEach(plan.outcomes.prefix(3), id: \.self) { Text("· \($0)").font(.subheadline) } } else { Text("让 AI 助理结合项目、现金风险和阻塞事项，帮你安排本周重点。").font(.subheadline).foregroundStyle(.secondary) } }
+        VStack(alignment: .leading, spacing: 8) { sectionTitle("本周计划", detail: state.weeklyPlan?.weekStart ?? "尚未安排"); if let plan = state.weeklyPlan { if let theme = plan.theme { Text(theme).font(.headline) }; ForEach(plan.outcomes.prefix(3), id: \.self) { Text("· \($0)").font(.subheadline) } } else { Text("让 AI 助理结合项目和阻塞事项，帮你安排本周重点。").font(.subheadline).foregroundStyle(.secondary) } }
             .surfaceCard(padding: 16)
     }
 

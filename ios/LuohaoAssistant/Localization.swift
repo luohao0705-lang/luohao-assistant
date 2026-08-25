@@ -4,6 +4,13 @@ func localizedTaskStatus(_ value: String) -> String {
     ["todo": "待办", "in_progress": "进行中", "blocked": "阻塞", "done": "已完成", "cancelled": "已取消"][value] ?? value
 }
 
+func isFinancialTask(_ task: FocusTask) -> Bool {
+    let title = task.title
+    let keywords = ["欠款", "还款", "贷款", "房贷", "车贷", "债务", "月供", "收款", "付款"]
+    if keywords.contains(where: title.contains) { return true }
+    return title.contains("元") && title.range(of: "[0-9]", options: .regularExpression) != nil
+}
+
 func localizedProjectStage(_ value: String) -> String {
     ["planning": "规划", "discovery": "探索", "validation": "验证", "delivery": "交付", "paused": "暂停", "completed": "已完成", "active": "推进中"][value] ?? value
 }

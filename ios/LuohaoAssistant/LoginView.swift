@@ -5,8 +5,8 @@ struct LoginView: View {
     @State private var password = ""
     @FocusState private var passwordFocused: Bool
 
-    private var isPINComplete: Bool {
-        password.utf8.count == 2 && password.utf8.allSatisfy { $0 >= 48 && $0 <= 57 }
+    private var hasPINInput: Bool {
+        !password.isEmpty
     }
 
     var body: some View {
@@ -64,7 +64,7 @@ struct LoginView: View {
                     .foregroundStyle(.secondary)
             }
 
-            SecureField("输入两位数字", text: $password)
+            SecureField("输入8位数字", text: $password)
                 .font(.body)
                 .textContentType(.password)
                 .keyboardType(.numberPad)
@@ -81,10 +81,20 @@ struct LoginView: View {
                 .onChange(of: password) { _, newValue in
                     let digits = newValue.utf8
                         .filter { $0 >= 48 && $0 <= 57 }
-                        .prefix(2)
+                        .prefix(8)
                     let normalized = String(decoding: digits, as: UTF8.self)
                     if normalized != newValue { password = normalized }
                 }
+
+            HStack(spacing: 7) {
+                ForEach(0..<8, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(index < password.count ? Color.orange : Color.primary.opacity(0.08))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 5)
+                }
+            }
+            .accessibilityHidden(true)
 
             Button(action: signIn) {
                 PrimaryActionLabel(title: "进入经营台", systemImage: "arrow.right", isLoading: state.isLoading)
@@ -92,7 +102,7 @@ struct LoginView: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
             .controlSize(.large)
-            .disabled(!isPINComplete || state.isLoading)
+            .disabled(!hasPINInput || state.isLoading)
 
             if let error = state.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -112,7 +122,7 @@ struct LoginView: View {
     }
 
     private func signIn() {
-        guard isPINComplete else { return }
+        guard hasPINInput else { return }
         passwordFocused = false
         Task { await state.login(password: password) }
     }

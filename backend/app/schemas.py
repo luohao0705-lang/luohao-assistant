@@ -142,7 +142,7 @@ class WeeklyPlanCreate(BaseModel):
 
 class AssistantCommand(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
-    mode: str = Field(default="chat", pattern="^(chat|plan|execute)$")
+    mode: str = Field(default="chat", pattern="^(chat|finance|plan|execute)$")
     history: list["AssistantHistoryItem"] = Field(default_factory=list, max_length=20)
 
 

@@ -973,7 +973,8 @@ struct TasksView: View {
     }
 
     private var filteredTasks: [FocusTask] {
-        filter == "全部" ? state.tasks : state.tasks.filter { $0.status == filter }
+        let items = state.tasks.filter { !isFinancialTask($0) }
+        return filter == "全部" ? items : items.filter { $0.status == filter }
     }
 }
 
