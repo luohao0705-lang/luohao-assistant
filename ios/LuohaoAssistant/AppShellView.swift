@@ -42,11 +42,11 @@ struct AppShellView: View {
 
 struct FinanceView: View {
     @ObservedObject var state: AppState
-    @State private var section = "概览"
     @State private var showingEntry = false
     @State private var entryType = "收支"
     @State private var selectedTransaction: TransactionSummary?
     @State private var selectedDebt: DebtSummary?
+    @State private var selectedDueDate: Date?
     private let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -58,7 +58,7 @@ struct FinanceView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    pageHeader("财务中枢", subtitle: "先看现金安全，再安排支出和还款")
+                    pageHeader("财务中枢", subtitle: "先看现金安全，再安排每一笔还款")
                     if state.dashboard == nil, let error = state.errorMessage {
                         DataStatusBanner(message: error, retry: { await state.refreshDashboard() })
                     }
@@ -75,21 +75,34 @@ struct FinanceView: View {
                             metric("计划支出", dashboard.plannedExpenseCents, .secondary)
                         }
                     }
-                    sectionTitle("现金预测", detail: "未来 45 天")
+
+                    PageSectionHeader(title: "还款日历", detail: "点日期查看当天应还")
+                    if state.debts.isEmpty {
+                        empty("还没有债务记录", message: "通过语音告诉助理债权人、金额和还款日期。", icon: "calendar")
+                    } else {
+                        DebtCalendarSection(debts: state.debts, selectedDate: $selectedDueDate)
+                    }
+
+                    PageSectionHeader(title: "近期要还", detail: "按到期日排序")
+                    upcomingDebtSection
+
+                    PageSectionHeader(title: "按人查看", detail: "每位债权人的未偿金额")
+                    creditorSection
+
+                    if state.debts.contains(where: { $0.outstandingCents > 0 && $0.dueOn == nil }) {
+                        Label("有 \(state.debts.filter { $0.outstandingCents > 0 && $0.dueOn == nil }.count) 笔债务尚未设置还款日期", systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 4)
+                    }
+
+                    PageSectionHeader(title: "现金预测", detail: "未来 45 天")
                     if state.cashflow.isEmpty {
                         empty("还没有现金预测", message: "通过语音告诉助理预计收入、支出或还款日期。", icon: "chart.xyaxis.line")
-                    } else {
-                        cashflowMiniChart
-                    }
-                    sectionTitle("下一步", detail: nil)
-                    Picker("财务视图", selection: $section) {
-                        Text("概览").tag("概览")
-                        Text("账户").tag("账户")
-                        Text("流水").tag("流水")
-                        Text("债务").tag("债务")
-                    }
-                    .pickerStyle(.segmented)
-                    financeDetail
+                    } else { cashflowMiniChart }
+
+                    PageSectionHeader(title: "账户与流水", detail: nil)
+                    accountAndTransactionSection
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
@@ -102,6 +115,7 @@ struct FinanceView: View {
                     Menu {
                         Button { entryType = "收支"; showingEntry = true } label: { Label("新增记录", systemImage: "plus") }
                         Button { entryType = "账户"; showingEntry = true } label: { Label("新增账户", systemImage: "building.columns") }
+                        Button { entryType = "债务"; showingEntry = true } label: { Label("新增债务", systemImage: "calendar.badge.plus") }
                     } label: { Image(systemName: "plus") }
                     .accessibilityLabel("新增财务数据")
                 }
@@ -138,41 +152,258 @@ struct FinanceView: View {
             }
     }
 
-    @ViewBuilder private var financeDetail: some View {
-        switch section {
-        case "账户":
-            if state.accounts.isEmpty { empty("还没有账户", message: "使用 AI 助理或后续新增账户。", icon: "building.columns") }
-            else { ForEach(state.accounts) { account in detailRow(account.name, localizedAccountKind(account.kind), account.balanceCents, account.currency) } }
-        case "流水":
-            if state.transactions.isEmpty { empty("还没有流水", message: "收入和支出会在这里按日期记录。", icon: "list.bullet.rectangle") }
-            else { ForEach(state.transactions.prefix(20)) { item in
-                Button { selectedTransaction = item } label: {
-                    detailRow(item.counterparty ?? (item.kind == "income" ? "收入" : "支出"), "\(item.occurredOn) · \(statusLabel(item.status))", item.kind == "income" ? item.amountCents : -item.amountCents, "CNY")
-                }.buttonStyle(.plain)
-            } }
-        case "债务":
-            if state.debts.isEmpty { empty("没有未偿债务", message: "新增贷款或应付款后，这里会显示还款压力。", icon: "creditcard") }
-            else { ForEach(state.debts) { debt in
-                Button { selectedDebt = debt } label: { detailRow(debt.creditor, "\(localizedDebtStatus(debt.status)) · " + (debt.dueOn.map { "到期 \($0)" } ?? "未设到期日"), debt.outstandingCents, "CNY") }.buttonStyle(.plain)
-            } }
-        default:
-            Text("金额明细已按账户、流水和债务分开整理。")
-                .font(.subheadline).foregroundStyle(.secondary)
+    private var upcomingDebtSection: some View {
+        let items = state.debts
+            .filter { $0.outstandingCents > 0 && $0.dueOn != nil }
+            .sorted { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") }
+        return Group {
+            if items.isEmpty {
+                empty("暂无已安排日期的还款", message: "给债务补充到期日后，这里会自动提醒。", icon: "checkmark.circle")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(items.prefix(8)) { debt in
+                        Button { selectedDebt = debt } label: { upcomingDebtRow(debt) }
+                            .buttonStyle(.plain)
+                        if debt.id != items.prefix(8).last?.id { Divider() }
+                    }
+                }
+                .surfaceCard(padding: 12, radius: 14)
+            }
         }
     }
 
-    private func statusLabel(_ value: String) -> String {
-        ["planned": "计划", "confirmed": "已确认", "paid": "已支付", "overdue": "已逾期", "cancelled": "已取消"][value] ?? value
-    }
-
-    private func detailRow(_ title: String, _ subtitle: String, _ cents: Int, _ currencyCode: String) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+    private func upcomingDebtRow(_ debt: DebtSummary) -> some View {
+        let due = parseDate(debt.dueOn)
+        let isOverdue = due.map { Calendar.current.startOfDay(for: $0) < Calendar.current.startOfDay(for: Date()) } ?? false
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(debt.creditor).font(.headline)
+                Text(due.map { dueLabel($0) } ?? "未设还款日")
+                    .font(.caption).foregroundStyle(isOverdue ? .red : .secondary)
+            }
             Spacer()
-            Text(currency.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0")
-                .font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(cents < 0 ? .red : .primary)
+            Text(formatCurrency(debt.outstandingCents))
+                .font(.subheadline.weight(.semibold)).monospacedDigit()
+                .foregroundStyle(isOverdue ? .red : .primary)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .padding(.vertical, 9)
+    }
+
+    private var creditorSection: some View {
+        let groups = creditorGroups
+        return Group {
+            if groups.isEmpty {
+                empty("还没有债权人", message: "每笔债务保存后会自动按债权人归类。", icon: "person.2")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(groups) { group in
+                        VStack(alignment: .leading, spacing: 9) {
+                            HStack {
+                                Text(group.creditor).font(.headline)
+                                Spacer()
+                                Text(formatCurrency(group.outstandingCents)).font(.headline.weight(.semibold)).monospacedDigit()
+                            }
+                            HStack(spacing: 14) {
+                                Label("本金 \(formatCurrency(group.principalCents))", systemImage: "doc.text")
+                                if let due = group.earliestDue { Label("最近 \(shortDate(due))", systemImage: "calendar") }
+                            }
+                            .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedDebt = group.debts.first }
+                        .padding(.vertical, 11)
+                        if group.id != groups.last?.id { Divider() }
+                    }
+                }
+                .surfaceCard(padding: 12, radius: 14)
+            }
+        }
+    }
+
+    @ViewBuilder private var accountAndTransactionSection: some View {
+        if state.accounts.isEmpty && state.transactions.isEmpty {
+            empty("还没有账户或流水", message: "账户、收入和支出会在这里按来源整理。", icon: "list.bullet.rectangle")
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(state.accounts) { account in
+                    HStack {
+                        Label(account.name, systemImage: "building.columns")
+                        Spacer()
+                        Text(formatCurrency(account.balanceCents)).monospacedDigit()
+                    }.padding(.vertical, 8)
+                }
+                if !state.accounts.isEmpty && !state.transactions.isEmpty { Divider().padding(.vertical, 4) }
+                ForEach(state.transactions.prefix(8)) { item in
+                    Button { selectedTransaction = item } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.counterparty ?? (item.kind == "income" ? "收入" : "支出")).font(.subheadline.weight(.medium))
+                                Text("\(item.occurredOn) · \(item.status == "paid" ? "已支付" : "已确认")").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(formatCurrency(item.kind == "income" ? item.amountCents : -item.amountCents)).monospacedDigit()
+                                .foregroundStyle(item.kind == "income" ? .green : .primary)
+                        }
+                    }.buttonStyle(.plain).padding(.vertical, 7)
+                }
+            }
+            .surfaceCard(padding: 14, radius: 14)
+        }
+    }
+
+    private struct CreditorGroup: Identifiable {
+        let creditor: String
+        let debts: [DebtSummary]
+        var id: String { creditor }
+        var principalCents: Int { debts.reduce(0) { $0 + $1.principalCents } }
+        var outstandingCents: Int { debts.reduce(0) { $0 + $1.outstandingCents } }
+        var earliestDue: Date? {
+            let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
+            return debts.compactMap { $0.dueOn.flatMap { formatter.date(from: $0) } }.min()
+        }
+    }
+
+    private var creditorGroups: [CreditorGroup] {
+        Dictionary(grouping: state.debts.filter { $0.outstandingCents > 0 }, by: { $0.creditor })
+            .map { CreditorGroup(creditor: $0.key, debts: $0.value.sorted { ($0.dueOn ?? "9999") < ($1.dueOn ?? "9999") }) }
+            .sorted { $0.outstandingCents > $1.outstandingCents }
+    }
+
+    private func parseDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.date(from: value)
+    }
+
+    private func formatCurrency(_ cents: Int) -> String {
+        currency.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0"
+    }
+
+    private func dueLabel(_ date: Date) -> String {
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
+        if days < 0 { return "已逾期 \(-days) 天 · \(shortDate(date))" }
+        if days == 0 { return "今天还款" }
+        if days == 1 { return "明天还款" }
+        return "\(days) 天后 · \(shortDate(date))"
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.dateFormat = "M月d日"; formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: date)
+    }
+}
+
+private struct DebtCalendarSection: View {
+    let debts: [DebtSummary]
+    @Binding var selectedDate: Date?
+    @State private var month = Date()
+    private let calendar = Calendar(identifier: .gregorian)
+    private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+
+    private var monthStart: Date { calendar.dateInterval(of: .month, for: month)?.start ?? month }
+    private var monthDays: [Date] {
+        let offset = (calendar.component(.weekday, from: monthStart) + 5) % 7
+        return (0..<42).compactMap { calendar.date(byAdding: .day, value: $0 - offset, to: monthStart) }
+    }
+    private var grouped: [Date: [DebtSummary]] {
+        Dictionary(grouping: debts.filter { $0.outstandingCents > 0 }) { debt in
+            guard let value = debt.dueOn, let date = parse(value) else { return Date.distantFuture }
+            return calendar.startOfDay(for: date)
+        }
+    }
+    private var selectedDebts: [DebtSummary] {
+        guard let selectedDate else { return [] }
+        return grouped[calendar.startOfDay(for: selectedDate)] ?? []
+    }
+    private var selectedTotal: Int { selectedDebts.reduce(0) { $0 + $1.outstandingCents } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }.accessibilityLabel("上个月")
+                Spacer()
+                Text(monthTitle).font(.headline.weight(.semibold))
+                Spacer()
+                Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }.accessibilityLabel("下个月")
+            }
+            .buttonStyle(.borderless)
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 8) {
+                ForEach(weekdays, id: \.self) { Text($0).font(.caption2.weight(.medium)).foregroundStyle(.secondary) }
+                ForEach(monthDays, id: \.self) { day in calendarDay(day) }
+            }
+
+            if let selectedDate, !selectedDebts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("\(selectedDate.formatted(.dateTime.month().day())) 应还").font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(format(selectedTotal)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                    }
+                    ForEach(selectedDebts) { debt in
+                        HStack { Text(debt.creditor); Spacer(); Text(format(debt.outstandingCents)).monospacedDigit() }
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(LuohaoDesign.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Label(selectedDate == nil ? "选择有标记的日期查看应还明细" : "当天没有待还款项", systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .surfaceCard(padding: 14, radius: 14)
+        .onAppear {
+            if selectedDate == nil { selectedDate = nextDateInMonth() }
+        }
+    }
+
+    private func calendarDay(_ date: Date) -> some View {
+        let inMonth = calendar.isDate(date, equalTo: month, toGranularity: .month)
+        let key = calendar.startOfDay(for: date)
+        let hasDebt = grouped[key]?.isEmpty == false
+        let isSelected = selectedDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+        let isToday = calendar.isDateInToday(date)
+        return Button {
+            selectedDate = hasDebt ? date : nil
+        } label: {
+            VStack(spacing: 3) {
+                Text("\(calendar.component(.day, from: date))").font(.caption.weight(isToday ? .bold : .regular))
+                Circle().fill(hasDebt ? LuohaoDesign.accent : .clear).frame(width: 5, height: 5)
+            }
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .foregroundStyle(inMonth ? (isSelected ? .white : .primary) : .tertiary)
+            .background(isSelected ? LuohaoDesign.accent : (isToday ? LuohaoDesign.accentTint : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!inMonth)
+        .accessibilityLabel("\(date.formatted(.dateTime.month().day()))\(hasDebt ? " 有待还款" : "")")
+    }
+
+    private var monthTitle: String {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy年M月"; formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: month)
+    }
+
+    private func moveMonth(_ value: Int) {
+        if let next = calendar.date(byAdding: .month, value: value, to: month) { month = next; selectedDate = nextDateInMonth() }
+    }
+
+    private func nextDateInMonth() -> Date? {
+        grouped.keys.filter { calendar.isDate($0, equalTo: month, toGranularity: .month) }.min()
+    }
+
+    private func parse(_ value: String) -> Date? {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.date(from: value)
+    }
+
+    private func format(_ cents: Int) -> String {
+        let formatter = NumberFormatter(); formatter.numberStyle = .currency; formatter.currencyCode = "CNY"
+        return formatter.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0"
     }
 }
 
