@@ -446,6 +446,28 @@ def list_actions(status: str | None = Query(default=None), _: str = Depends(requ
     return {"items": [{"id": item.id, "action_type": item.action_type, "status": item.status, "payload": json.loads(item.payload_json), "result": json.loads(item.result_json) if item.result_json else None} for item in items]}
 
 
+def _find_legacy_debt(creditor: str, db: Session) -> Transaction | None:
+    items = [
+        item for item in legacy_debt_transactions(db)
+        if item.status not in {"paid", "cancelled"} and item.amount_cents > 0
+    ]
+    exact = [item for item in items if (item.counterparty or "").strip() == creditor]
+    if len(exact) == 1:
+        return exact[0]
+    partial = [
+        item for item in items
+        if creditor in (item.counterparty or "")
+        or (item.counterparty and item.counterparty in creditor)
+        or creditor in (item.note or "")
+    ]
+    if len(partial) == 1:
+        return partial[0]
+    if len(partial) > 1:
+        names = "、".join((item.counterparty or f"债务 {item.id}") for item in partial[:5])
+        raise HTTPException(status_code=422, detail=f"找到多笔名称相近的债务：{names}。请说明具体是哪一笔。")
+    return None
+
+
 def _confirm_action(action: AssistantAction, db: Session) -> dict:
     payload = json.loads(action.payload_json)
     if action.action_type == "propose_tasks":
@@ -503,18 +525,27 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
         debt = db.scalar(select(Debt).where(Debt.status == "open", Debt.creditor == creditor).order_by(Debt.id.desc()))
         if not debt:
             debt = db.scalar(select(Debt).where(Debt.status == "open", Debt.creditor.ilike(f"%{creditor}%")).order_by(Debt.id.desc()))
-        if not debt:
+        legacy_debt = None if debt else _find_legacy_debt(creditor, db)
+        if not debt and not legacy_debt:
             raise HTTPException(status_code=422, detail=f"没有找到待更新的债务：{creditor}")
         new_outstanding = payload.get("new_outstanding_cents")
-        previous_outstanding = max(0, int(debt.outstanding_cents))
+        previous_outstanding = max(0, int(debt.outstanding_cents if debt else legacy_debt.amount_cents))
         if payment_cents > previous_outstanding:
             raise HTTPException(status_code=422, detail="还款金额不能超过当前债务余额")
         calculated_outstanding = max(0, previous_outstanding - payment_cents)
         if new_outstanding is not None and int(new_outstanding) != calculated_outstanding:
             raise HTTPException(status_code=422, detail="还款金额与还款后的剩余债务不一致")
-        debt.outstanding_cents = calculated_outstanding
-        if debt.outstanding_cents == 0:
-            debt.status = "paid"
+        if debt:
+            debt.outstanding_cents = calculated_outstanding
+            if debt.outstanding_cents == 0:
+                debt.status = "paid"
+        else:
+            # Older production data stores the remaining debt balance directly
+            # in the transaction amount. Updating it keeps dashboard totals and
+            # the per-person debt view correct without forcing a data migration.
+            legacy_debt.amount_cents = calculated_outstanding
+            if legacy_debt.amount_cents == 0:
+                legacy_debt.status = "paid"
         account_id = payload.get("account_id")
         if account_id is not None:
             account = db.get(Account, int(account_id))
@@ -523,10 +554,17 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
             if account.balance_cents < payment_cents:
                 raise HTTPException(status_code=422, detail="账户余额不足以完成这笔还款")
             account.balance_cents -= payment_cents
-        item = Transaction(account_id=account_id, kind="expense", amount_cents=payment_cents, occurred_on=date.fromisoformat(payload["occurred_on"]), status="confirmed", counterparty=creditor, note=payload.get("note") or "偿还债务")
+        item = Transaction(account_id=account_id, kind="expense", amount_cents=payment_cents, occurred_on=date.fromisoformat(payload["occurred_on"]), status="confirmed", counterparty=creditor, note=payload.get("note") or f"偿还债务：{creditor}")
         db.add(item)
         db.flush()
-        return {"debt_id": debt.id, "transaction_id": item.id, "payment_cents": payment_cents, "outstanding_cents": debt.outstanding_cents}
+        return {
+            "debt_id": debt.id if debt else None,
+            "legacy_debt_transaction_id": legacy_debt.id if legacy_debt else None,
+            "transaction_id": item.id,
+            "payment_cents": payment_cents,
+            "previous_outstanding_cents": previous_outstanding,
+            "outstanding_cents": calculated_outstanding,
+        }
     if action.action_type == "propose_tasks":
         task_ids = [_create_task(task_data, db, payload.get("project_id")).id for task_data in payload.get("tasks", [])]
         return {"task_ids": task_ids, "count": len(task_ids)}
