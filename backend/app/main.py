@@ -465,6 +465,12 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
             note=payload.get("note"),
         )
         db.add(item)
+        account_id = payload.get("account_id")
+        if account_id is not None:
+            account = db.get(Account, int(account_id))
+            if not account:
+                raise HTTPException(status_code=422, detail="没有找到对应账户")
+            account.balance_cents += amount_cents if kind == "income" else -amount_cents
         db.flush()
         return {"transaction_id": item.id, "amount_cents": amount_cents, "kind": kind}
     if action.action_type == "propose_debt_payment":
@@ -487,7 +493,15 @@ def _confirm_action(action: AssistantAction, db: Session) -> dict:
         debt.outstanding_cents = calculated_outstanding
         if debt.outstanding_cents == 0:
             debt.status = "paid"
-        item = Transaction(kind="expense", amount_cents=payment_cents, occurred_on=date.fromisoformat(payload["occurred_on"]), status="confirmed", counterparty=creditor, note=payload.get("note") or "偿还债务")
+        account_id = payload.get("account_id")
+        if account_id is not None:
+            account = db.get(Account, int(account_id))
+            if not account:
+                raise HTTPException(status_code=422, detail="没有找到对应账户")
+            if account.balance_cents < payment_cents:
+                raise HTTPException(status_code=422, detail="账户余额不足以完成这笔还款")
+            account.balance_cents -= payment_cents
+        item = Transaction(account_id=account_id, kind="expense", amount_cents=payment_cents, occurred_on=date.fromisoformat(payload["occurred_on"]), status="confirmed", counterparty=creditor, note=payload.get("note") or "偿还债务")
         db.add(item)
         db.flush()
         return {"debt_id": debt.id, "transaction_id": item.id, "payment_cents": payment_cents, "outstanding_cents": debt.outstanding_cents}
