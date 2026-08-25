@@ -15,10 +15,24 @@ private struct AssistantMessage: Identifiable {
 
     init(role: Role, text: String, toolResults: [[String: JSONValue]] = [], suggestions: [String] = [], isError: Bool = false) {
         self.role = role
-        self.text = text
-        self.toolResults = toolResults
-        self.suggestions = suggestions
-        self.isError = isError
+        if Self.containsInternalProtocol(text) {
+            // A few DeepSeek gateways can return their internal DSML trace as
+            // assistant content. It must never be exposed in the chat UI.
+            self.text = "这次请求没有正常完成，未写入或修改任何数据。请重新发送，或先核对后再确认。"
+            self.toolResults = []
+            self.suggestions = ["重新发送", "查看当前债务"]
+            self.isError = true
+        } else {
+            self.text = text
+            self.toolResults = toolResults
+            self.suggestions = suggestions
+            self.isError = isError
+        }
+    }
+
+    private static func containsInternalProtocol(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.contains("dsml") || normalized.contains("tool_calls") || normalized.contains("<|")
     }
 }
 

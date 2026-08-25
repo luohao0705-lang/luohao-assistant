@@ -8,6 +8,7 @@ struct LoginResponse: Decodable {
 
 struct DashboardSummary: Decodable {
     let cashCents: Int
+    let cashRegistered: Bool
     let outstandingDebtCents: Int
     let plannedIncomeCents: Int
     let plannedExpenseCents: Int
@@ -19,7 +20,7 @@ struct DashboardSummary: Decodable {
     let openTasks: Int
     let riskFlags: [String]
     enum CodingKeys: String, CodingKey {
-        case cashCents = "cash_cents"; case outstandingDebtCents = "outstanding_debt_cents"; case plannedIncomeCents = "planned_income_cents"; case plannedExpenseCents = "planned_expense_cents"; case debtDue30dCents = "debt_due_30d_cents"; case overdueIncomeCents = "overdue_income_cents"; case forecastLowestBalanceCents = "forecast_lowest_balance_cents"; case forecastLowestDate = "forecast_lowest_date"; case activeProjects = "active_projects"; case openTasks = "open_tasks"; case riskFlags = "risk_flags"
+        case cashCents = "cash_cents"; case cashRegistered = "cash_registered"; case outstandingDebtCents = "outstanding_debt_cents"; case plannedIncomeCents = "planned_income_cents"; case plannedExpenseCents = "planned_expense_cents"; case debtDue30dCents = "debt_due_30d_cents"; case overdueIncomeCents = "overdue_income_cents"; case forecastLowestBalanceCents = "forecast_lowest_balance_cents"; case forecastLowestDate = "forecast_lowest_date"; case activeProjects = "active_projects"; case openTasks = "open_tasks"; case riskFlags = "risk_flags"
     }
 }
 

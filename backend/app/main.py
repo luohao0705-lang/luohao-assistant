@@ -220,6 +220,11 @@ def create_account(payload: AccountCreate, _: str = Depends(require_auth), db: S
 @app.post("/finance/transactions", response_model=IdResponse)
 def create_transaction(payload: TransactionCreate, _: str = Depends(require_auth), db: Session = Depends(get_db)) -> IdResponse:
     item = Transaction(**payload.model_dump())
+    if item.account_id is not None and item.status in {"confirmed", "paid"}:
+        account = db.get(Account, int(item.account_id))
+        if not account:
+            raise HTTPException(status_code=422, detail="没有找到对应账户")
+        account.balance_cents += item.amount_cents if item.kind == "income" else -item.amount_cents
     db.add(item)
     db.add(EventLog(event_type="transaction.created", payload_json=payload.model_dump_json()))
     db.commit()
@@ -232,7 +237,24 @@ def update_transaction(transaction_id: int, payload: TransactionUpdate, _: str =
     item = db.get(Transaction, transaction_id)
     if not item:
         raise HTTPException(status_code=404, detail="transaction not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    old_values = {
+        "account_id": item.account_id,
+        "kind": item.kind,
+        "amount_cents": item.amount_cents,
+        "status": item.status,
+    }
+    values = payload.model_dump(exclude_unset=True)
+    new_values = {**old_values, **values}
+    if old_values["account_id"] is not None and old_values["status"] in {"confirmed", "paid"}:
+        old_account = db.get(Account, int(old_values["account_id"]))
+        if old_account:
+            old_account.balance_cents -= old_values["amount_cents"] if old_values["kind"] == "income" else -old_values["amount_cents"]
+    if new_values["account_id"] is not None and new_values["status"] in {"confirmed", "paid"}:
+        new_account = db.get(Account, int(new_values["account_id"]))
+        if not new_account:
+            raise HTTPException(status_code=422, detail="没有找到对应账户")
+        new_account.balance_cents += new_values["amount_cents"] if new_values["kind"] == "income" else -new_values["amount_cents"]
+    for key, value in values.items():
         setattr(item, key, value)
     db.add(EventLog(event_type="transaction.updated", payload_json=payload.model_dump_json()))
     db.commit()

@@ -18,9 +18,11 @@ TOOLS = [
     {"type": "function", "function": {"name": "create_weekly_plan", "description": "Propose a weekly plan; owner confirmation is required.", "parameters": {"type": "object", "properties": {"week_start": {"type": "string"}, "theme": {"type": ["string", "null"]}, "outcomes": {"type": "array", "items": {"type": "string"}}, "priorities": {"type": "array", "items": {"type": "string"}}, "risks": {"type": "array", "items": {"type": "string"}}}, "required": ["week_start", "outcomes", "priorities"]}}},
     {"type": "function", "function": {"name": "get_daily_focus", "description": "Read today's prioritized command center.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "get_dashboard", "description": "Read the current operating dashboard.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_accounts", "description": "Read current cash accounts and balances. Read-only; never writes data.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "get_debts", "description": "Read open debts, scheduled payment dates and monthly payments. Read-only; never writes data.", "parameters": {"type": "object", "properties": {}}}},
 ]
 
-READ_ONLY_TOOL_NAMES = {"get_dashboard", "get_daily_focus"}
+READ_ONLY_TOOL_NAMES = {"get_dashboard", "get_daily_focus", "get_accounts", "get_debts"}
 READ_ONLY_TOOLS = [
     tool for tool in TOOLS
     if tool["function"]["name"] in READ_ONLY_TOOL_NAMES
@@ -80,7 +82,11 @@ def monthly_payment_date(payment_day: int | None, fallback: date | None, year: i
     day = payment_day or (fallback.day if fallback else None)
     if not day:
         return None
-    return date(year, month, min(day, calendar.monthrange(year, month)[1]))
+    candidate = date(year, month, min(day, calendar.monthrange(year, month)[1]))
+    # A recurring schedule must not create a payment before its first recorded due date.
+    if fallback and candidate < fallback:
+        return None
+    return candidate
 
 
 def scheduled_payment_date(debt: Debt, year: int, month: int) -> date | None:
@@ -89,6 +95,17 @@ def scheduled_payment_date(debt: Debt, year: int, month: int) -> date | None:
 
 def legacy_scheduled_payment_date(item: Transaction, year: int, month: int) -> date | None:
     return monthly_payment_date(legacy_payment_day(item), item.expected_on, year, month)
+
+
+def payment_due_within(payment_day: int | None, fallback: date | None, start: date, days: int) -> bool:
+    """Return whether a monthly payment falls in the rolling window, including next months."""
+    if not payment_day and not fallback:
+        return False
+    for offset in range(days + 1):
+        current = start + timedelta(days=offset)
+        if monthly_payment_date(payment_day, fallback, current.year, current.month) == current:
+            return True
+    return False
 
 
 def open_debts(db: Session) -> tuple[list[Debt], list[Transaction]]:
@@ -142,6 +159,15 @@ def available_cash_cents(accounts: list[Account], transactions: list[Transaction
     return account_balance + standalone
 
 
+def has_registered_cash(accounts: list[Account], transactions: list[Transaction]) -> bool:
+    return bool(accounts) or any(
+        item.account_id is None
+        and item.status in {"confirmed", "paid"}
+        and not is_legacy_debt_transaction(item)
+        for item in transactions
+    )
+
+
 def task_priority_score(item: Task, today: date | None = None) -> int:
     today = today or date.today()
     due_bonus = 0
@@ -173,33 +199,34 @@ def dashboard_snapshot(db: Session) -> dict:
     tasks = db.scalars(select(Task).where(Task.status.in_(["todo", "in_progress", "blocked"]))).all()
     today = date.today()
     cash_cents = available_cash_cents(accounts, transactions)
+    cash_registered = has_registered_cash(accounts, transactions)
     outstanding_debt_cents = sum(item.outstanding_cents for item in debts) + sum(item.amount_cents for item in legacy_debts)
     planned_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     planned_expense = sum(item.amount_cents for item in transactions if item.kind == "expense" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     due_soon = sum(
         debt_monthly_payment_cents(item) or 0
         for item in debts
-        if (scheduled := scheduled_payment_date(item, today.year, today.month)) and 0 <= (scheduled - today).days <= 30
+        if payment_due_within(item.payment_day, item.due_on, today, 30)
     )
     due_soon += sum(
         legacy_monthly_payment_cents(item) or 0
         for item in legacy_debts
-        if (scheduled := legacy_scheduled_payment_date(item, today.year, today.month)) and 0 <= (scheduled - today).days <= 30
+        if payment_due_within(legacy_payment_day(item), item.expected_on, today, 30)
     )
     overdue_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) < today)
     forecast = cashflow_forecast(db, 90)
     lowest = min(forecast, key=lambda item: item["balance_cents"]) if forecast else {"date": today.isoformat(), "balance_cents": cash_cents}
     risk_flags = []
-    if lowest["balance_cents"] < 0:
+    if cash_registered and lowest["balance_cents"] < 0:
         risk_flags.append(f"预计 {lowest['date']} 出现现金缺口：{abs(lowest['balance_cents'])} 分")
-    if due_soon > cash_cents:
+    if cash_registered and due_soon > cash_cents:
         risk_flags.append("未来 30 天到期债务超过当前现金")
     if overdue_income:
         risk_flags.append(f"逾期预计收入：{overdue_income} 分")
     blocked_count = sum(1 for item in tasks if item.status == "blocked")
     if blocked_count:
         risk_flags.append(f"有待你处理的阻塞事项：{blocked_count} 项")
-    return {"cash_cents": cash_cents, "outstanding_debt_cents": outstanding_debt_cents, "planned_income_cents": planned_income, "planned_expense_cents": planned_expense, "debt_due_30d_cents": due_soon, "overdue_income_cents": overdue_income, "forecast_lowest_balance_cents": lowest["balance_cents"], "forecast_lowest_date": lowest["date"], "active_projects": len(projects), "open_tasks": len(tasks), "blocked_tasks": blocked_count, "risk_flags": risk_flags}
+    return {"cash_cents": cash_cents, "cash_registered": cash_registered, "outstanding_debt_cents": outstanding_debt_cents, "planned_income_cents": planned_income, "planned_expense_cents": planned_expense, "debt_due_30d_cents": due_soon, "overdue_income_cents": overdue_income, "forecast_lowest_balance_cents": lowest["balance_cents"], "forecast_lowest_date": lowest["date"], "active_projects": len(projects), "open_tasks": len(tasks), "blocked_tasks": blocked_count, "risk_flags": risk_flags}
 
 
 def dashboard_snapshot_for_ai(snapshot: dict) -> dict:
@@ -227,6 +254,11 @@ def execute_tool(name: str, arguments: dict, db: Session) -> dict:
         return dashboard_snapshot_for_ai(dashboard_snapshot(db))
     if name == "get_daily_focus":
         return daily_focus_snapshot(db)
+    if name == "get_accounts":
+        return {"items": [{"id": item.id, "name": item.name, "kind": item.kind, "balance_yuan": round(item.balance_cents / 100, 2), "currency": item.currency} for item in db.scalars(select(Account).order_by(Account.id.asc()).limit(20)).all()]}
+    if name == "get_debts":
+        debts, legacy = open_debts(db)
+        return {"items": [{"id": item.id, "creditor": item.creditor, "outstanding_yuan": round(item.outstanding_cents / 100, 2), "monthly_payment_yuan": round((debt_monthly_payment_cents(item) or 0) / 100, 2), "payment_day": item.payment_day, "status": item.status} for item in debts] + [{"id": item.id, "creditor": item.counterparty, "outstanding_yuan": round(item.amount_cents / 100, 2), "monthly_payment_yuan": round((legacy_monthly_payment_cents(item) or 0) / 100, 2), "payment_day": legacy_payment_day(item), "status": "open"} for item in legacy]}
     if name in {"propose_finance_entry", "propose_debt_payment", "propose_tasks", "create_project_plan", "create_weekly_plan"}:
         return _pending_action(name, arguments, db)
     return {"error": f"unsupported tool: {name}"}
@@ -308,7 +340,14 @@ async def run_assistant(text: str, mode: str, db: Session, history: list[dict] |
                 message = final_response.json()["choices"][0]["message"]
     except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
         return {"reply": "AI 服务暂时不可用，经营数据仍可继续查看。", "snapshot": snapshot, "tool_results": [], "suggestions": [], "error": str(exc)}
-    reply, suggestions = _extract_suggestions(message.get("content") or "分析完成。")
+    raw_content = message.get("content") or ""
+    # Some DeepSeek gateways expose an internal DSML tool trace as assistant text
+    # instead of a structured tool_calls array. Never show that protocol to the user.
+    if "DSML" in raw_content or "tool_calls" in raw_content or "<|" in raw_content:
+        reply = "我收到了你的信息，但这次工具调用没有正常完成。没有写入或修改任何财务数据，请再说一次要处理的两笔还款，或直接在财务页核对后确认。"
+        suggestions = ["查看当前债务", "重新处理这两笔还款"]
+    else:
+        reply, suggestions = _extract_suggestions(raw_content or "分析完成。")
     return {"reply": reply, "snapshot": dashboard_snapshot(db), "tool_results": tool_results, "suggestions": suggestions}
 
 
@@ -370,6 +409,8 @@ async def morning_brief_v2(db: Session) -> dict:
     if not settings.deepseek_api_key:
         return fallback
     prompt = "请根据以下创业者经营数据生成一份极简中文早间经营简报。只输出 JSON，不要 Markdown：{\"summary\":\"不超过100字，明确当前状态和最大风险\",\"life_advice\":[\"1-2条人生与精力建议\"],\"finance_advice\":[\"1-3条财务建议\"],\"work_advice\":[\"1-3条工作与项目建议\"]}。涉及现金预测时必须写清未来预测窗口内的最低现金余额、金额、日期；负数才称为现金缺口，不能把某一天的余额说成当天要支付的金额。金额字段已经是人民币元，不要换算。数据：" + json.dumps(context, ensure_ascii=False)
+    if not snapshot["cash_registered"]:
+        prompt += "。特别注意：cash_registered 为 false，当前现金尚未登记，不能把 cash_cents=0 解释为实际现金为 0，也不能计算或声称现金缺口；只能提醒用户先登记现金账户或当前余额。"
     payload = {"model": settings.deepseek_chat_model, "messages": [{"role": "system", "content": "你是创业者的经营顾问，只根据给定数据，不臆测金额；建议要具体、短、可执行。"}, {"role": "user", "content": prompt}], "temperature": 0.2}
     try:
         async with httpx.AsyncClient(timeout=30) as client:

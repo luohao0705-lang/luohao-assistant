@@ -94,14 +94,18 @@ struct DashboardView: View {
         let lowestForecast = currency.string(from: NSNumber(value: Double(d.forecastLowestBalanceCents) / 100)) ?? "-"
         VStack(alignment: .leading, spacing: 6) {
             Text("先看现金，再决定行动").font(.subheadline).foregroundStyle(.secondary)
-            Text(currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
-            if d.forecastLowestBalanceCents < 0 {
+            Text(d.cashRegistered ? (currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-") : "未登记").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
+            if d.cashRegistered && d.forecastLowestBalanceCents < 0 {
                 let gap = currency.string(from: NSNumber(value: Double(-d.forecastLowestBalanceCents) / 100)) ?? "-"
                 Text("未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)；预计现金缺口为 \(gap)。")
                     .font(.caption)
                     .foregroundStyle(.red)
-            } else {
+            } else if d.cashRegistered {
                 Text("未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("尚未登记当前现金，现金缺口预测暂不计算。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
