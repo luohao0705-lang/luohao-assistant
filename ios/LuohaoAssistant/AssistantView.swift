@@ -436,6 +436,8 @@ struct AssistantView: View {
     private func handleQuickOption(_ option: String) {
         if ["确认登记", "确认执行", "确认方案"].contains(option) {
             resolveLatestPendingAction()
+        } else if option == "重新发送" {
+            retry()
         } else if option == "修改方案" {
             reviseLatestPendingAction()
         } else {
