@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, run_assistant, task_priority_score
+from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, legacy_debt_transactions, run_assistant, task_priority_score
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Account, AssistantAction, DecisionRecord, Debt, EventLog, Memory, Project, Task, TaskDependency, Transaction, WeeklyPlan
@@ -176,13 +176,26 @@ def list_debts(status: str | None = Query(default=None), _: str = Depends(requir
     if status:
         query = query.where(Debt.status == status)
     items = db.scalars(query).all()
-    return {"items": [{
+    result = [{
         "id": item.id, "creditor": item.creditor,
         "principal_cents": item.principal_cents, "outstanding_cents": item.outstanding_cents,
         "due_on": item.due_on.isoformat() if item.due_on else None,
         "interest_rate": float(item.interest_rate) if item.interest_rate is not None else None,
         "status": item.status, "note": item.note,
-    } for item in items]}
+    } for item in items]
+    if status in (None, "open"):
+        result.extend({
+            "id": -item.id,
+            "creditor": item.counterparty or "未标注债权人",
+            "principal_cents": item.amount_cents,
+            "outstanding_cents": item.amount_cents,
+            "due_on": item.expected_on.isoformat() if item.expected_on else None,
+            "interest_rate": None,
+            "status": "open",
+            "note": item.note,
+        } for item in legacy_debt_transactions(db) if item.status not in {"paid", "cancelled"})
+    result.sort(key=lambda item: (item["due_on"] is None, item["due_on"] or "9999-12-31", -item["id"]))
+    return {"items": result[:100]}
 
 
 @app.post("/finance/accounts", response_model=IdResponse)

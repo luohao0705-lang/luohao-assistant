@@ -162,8 +162,12 @@ struct FinanceView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(items.prefix(8)) { debt in
-                        Button { selectedDebt = debt } label: { upcomingDebtRow(debt) }
-                            .buttonStyle(.plain)
+                        if debt.id > 0 {
+                            Button { selectedDebt = debt } label: { upcomingDebtRow(debt) }
+                                .buttonStyle(.plain)
+                        } else {
+                            upcomingDebtRow(debt)
+                        }
                         if debt.id != items.prefix(8).last?.id { Divider() }
                     }
                 }
@@ -213,7 +217,9 @@ struct FinanceView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
-                        .onTapGesture { selectedDebt = group.debts.first }
+                        .onTapGesture {
+                            if let debt = group.debts.first(where: { $0.id > 0 }) { selectedDebt = debt }
+                        }
                         .padding(.vertical, 11)
                         if group.id != groups.last?.id { Divider() }
                     }

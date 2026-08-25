@@ -29,7 +29,8 @@ enum DebtReminderScheduler {
             components.minute = 0
             let content = UNMutableNotificationContent()
             content.title = "还款提醒"
-            content.body = "\(debt.creditor)应还 \(currency(debt.outstandingCents))"
+            // Keep lock-screen notifications private. The detail is available in the app.
+            content.body = "你有一条消息待查看"
             content.sound = .default
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(identifier: "\(identifierPrefix)\(debt.id)", content: content, trigger: trigger)
@@ -37,10 +38,4 @@ enum DebtReminderScheduler {
         }
     }
 
-    private static func currency(_ cents: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "CNY"
-        return formatter.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0"
-    }
 }

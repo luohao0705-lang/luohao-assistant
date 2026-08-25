@@ -30,6 +30,33 @@ def tools_for_mode(mode: str) -> list[dict]:
     return TOOLS if mode == "plan" else READ_ONLY_TOOLS
 
 
+def legacy_debt_transactions(db: Session) -> list[Transaction]:
+    """Return old debt entries that were recorded as ordinary expenses.
+
+    Early versions of the assistant stored a debt's remaining balance in a
+    confirmed expense transaction. Keep those records readable while the
+    dedicated debts table is used for all new entries.
+    """
+    items = db.scalars(select(Transaction).where(Transaction.kind == "expense")).all()
+    return [
+        item for item in items
+        if is_legacy_debt_transaction(item)
+    ]
+
+
+def is_legacy_debt_transaction(item: Transaction) -> bool:
+    return item.kind == "expense" and bool(item.note) and any(
+        term in item.note for term in ("欠款", "负债", "债务")
+    )
+
+
+def open_debts(db: Session) -> tuple[list[Debt], list[Transaction]]:
+    return (
+        db.scalars(select(Debt).where(Debt.status == "open")).all(),
+        [item for item in legacy_debt_transactions(db) if item.status not in {"paid", "cancelled"}],
+    )
+
+
 def _date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
@@ -37,7 +64,7 @@ def _date(value: str | None) -> date | None:
 def cashflow_forecast(db: Session, days: int = 90) -> list[dict]:
     accounts = db.scalars(select(Account)).all()
     transactions = db.scalars(select(Transaction)).all()
-    debts = db.scalars(select(Debt).where(Debt.status == "open")).all()
+    debts, legacy_debts = open_debts(db)
     balance = available_cash_cents(accounts, transactions)
     today = date.today()
     points: list[dict] = []
@@ -50,6 +77,9 @@ def cashflow_forecast(db: Session, days: int = 90) -> list[dict]:
         for debt in debts:
             if debt.due_on == current:
                 balance -= debt.outstanding_cents
+        for debt in legacy_debts:
+            if debt.expected_on == current:
+                balance -= debt.amount_cents
         points.append({"date": current.isoformat(), "balance_cents": balance})
     return points
 
@@ -66,6 +96,7 @@ def available_cash_cents(accounts: list[Account], transactions: list[Transaction
         item.amount_cents if item.kind == "income" else -item.amount_cents
         for item in transactions
         if item.account_id is None and item.status in {"confirmed", "paid"}
+        and not is_legacy_debt_transaction(item)
     )
     return account_balance + standalone
 
@@ -95,16 +126,17 @@ def daily_focus_snapshot(db: Session) -> dict:
 
 def dashboard_snapshot(db: Session) -> dict:
     accounts = db.scalars(select(Account)).all()
-    debts = db.scalars(select(Debt).where(Debt.status == "open")).all()
     transactions = db.scalars(select(Transaction)).all()
+    debts, legacy_debts = open_debts(db)
     projects = db.scalars(select(Project).where(Project.status.in_(["planning", "active", "paused"]))).all()
     tasks = db.scalars(select(Task).where(Task.status.in_(["todo", "in_progress", "blocked"]))).all()
     today = date.today()
     cash_cents = available_cash_cents(accounts, transactions)
-    outstanding_debt_cents = sum(item.outstanding_cents for item in debts)
+    outstanding_debt_cents = sum(item.outstanding_cents for item in debts) + sum(item.amount_cents for item in legacy_debts)
     planned_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     planned_expense = sum(item.amount_cents for item in transactions if item.kind == "expense" and item.status == "planned" and (item.expected_on or item.occurred_on) >= today)
     due_soon = sum(item.outstanding_cents for item in debts if item.due_on and 0 <= (item.due_on - today).days <= 30)
+    due_soon += sum(item.amount_cents for item in legacy_debts if item.expected_on and 0 <= (item.expected_on - today).days <= 30)
     overdue_income = sum(item.amount_cents for item in transactions if item.kind == "income" and item.status == "planned" and (item.expected_on or item.occurred_on) < today)
     forecast = cashflow_forecast(db, 90)
     lowest = min(forecast, key=lambda item: item["balance_cents"]) if forecast else {"date": today.isoformat(), "balance_cents": cash_cents}
