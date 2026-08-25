@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
-    password: str = Field(min_length=8, max_length=200)
+    password: str = Field(min_length=2, max_length=2, pattern=r"^[0-9]{2}$")
 
 
 class TokenResponse(BaseModel):

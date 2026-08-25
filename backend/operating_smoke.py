@@ -7,7 +7,7 @@ with tempfile.TemporaryDirectory() as directory:
     database_path = Path(directory, "operating.db").as_posix()
     os.environ["APP_ENV"] = "development"
     os.environ["DATABASE_URL"] = f"sqlite:///{database_path}"
-    os.environ["APP_PASSWORD"] = "test-password-123"
+    os.environ["APP_PASSWORD"] = "86"
     os.environ["JWT_SECRET"] = "x" * 40
 
     from fastapi.testclient import TestClient
@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as directory:
     client = TestClient(app)
     assert {tool["function"]["name"] for tool in tools_for_mode("chat")} == {"get_dashboard", "get_daily_focus"}
     assert len(tools_for_mode("plan")) > len(tools_for_mode("chat"))
-    login = client.post("/auth/login", json={"password": "test-password-123"})
+    login = client.post("/auth/login", json={"password": "86"})
     assert login.status_code == 200, login.text
     headers = {"Authorization": "Bearer " + login.json()["access_token"]}
     today = date.today()

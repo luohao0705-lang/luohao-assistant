@@ -60,9 +60,10 @@ struct LoginView: View {
                     .foregroundStyle(.secondary)
             }
 
-            SecureField("访问密码", text: $password)
+            SecureField("输入两位数字", text: $password)
                 .font(.body)
                 .textContentType(.password)
+                .keyboardType(.numberPad)
                 .submitLabel(.go)
                 .focused($passwordFocused)
                 .padding(.horizontal, 14)
@@ -73,6 +74,10 @@ struct LoginView: View {
                         .stroke(passwordFocused ? Color.orange.opacity(0.8) : LuohaoDesign.hairline, lineWidth: passwordFocused ? 1.5 : 1)
                 }
                 .onSubmit { signIn() }
+                .onChange(of: password) { _, newValue in
+                    let digits = newValue.filter(\.isNumber)
+                    password = String(digits.prefix(2))
+                }
 
             Button(action: signIn) {
                 PrimaryActionLabel(title: "进入经营台", systemImage: "arrow.right", isLoading: state.isLoading)
@@ -80,7 +85,7 @@ struct LoginView: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
             .controlSize(.large)
-            .disabled(password.count < 8 || state.isLoading)
+            .disabled(password.count != 2 || state.isLoading)
 
             if let error = state.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -100,7 +105,7 @@ struct LoginView: View {
     }
 
     private func signIn() {
-        guard password.count >= 8 else { return }
+        guard password.count == 2, password.allSatisfy(\.isNumber) else { return }
         passwordFocused = false
         Task { await state.login(password: password) }
     }
