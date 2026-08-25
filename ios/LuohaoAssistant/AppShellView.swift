@@ -181,7 +181,7 @@ struct FinanceView: View {
         let windows = [3, 7, 15, 30]
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                ForEach(windows, id: .self) { days in
+                ForEach(windows, id: \.self) { days in
                     Button { selectedPaymentWindow = days } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("近\(days)天")
