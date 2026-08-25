@@ -347,6 +347,43 @@ async def morning_brief(db: Session) -> dict:
         return fallback
 
 
+async def morning_brief_v2(db: Session) -> dict:
+    """Return a structured daily brief with separate life, finance, and work advice."""
+    snapshot = dashboard_snapshot(db)
+    focus = daily_focus_snapshot(db)
+    projects = db.scalars(select(Project).where(Project.status.in_(["planning", "active", "paused"])).order_by(Project.priority.desc()).limit(6)).all()
+    debts, _ = open_debts(db)
+    context = {
+        "dashboard": dashboard_snapshot_for_ai(snapshot),
+        "today_focus": focus,
+        "projects": [{"name": item.name, "next_action": item.next_action, "open_tasks": len([task for task in item.tasks if task.status in {"todo", "in_progress", "blocked"}])} for item in projects],
+        "debts": [{"creditor": item.creditor, "outstanding_yuan": round(item.outstanding_cents / 100, 2), "monthly_payment_yuan": round((debt_monthly_payment_cents(item) or 0) / 100, 2)} for item in debts],
+    }
+    fallback = {
+        "summary": f"当前有 {focus['open_count']} 项未完成事项，{len(projects)} 个进行中的项目。现金预测请重点查看最低余额日期。",
+        "life_advice": ["今天只保留一个明确的核心结果，给自己留出处理突发问题的时间。"],
+        "finance_advice": ["查看未来 7 天的还款与计划支出，确认最低现金余额能够覆盖。"],
+        "work_advice": ["先处理今日优先级最高的事项，再推进一个项目的下一步。"],
+        "date": date.today().isoformat(),
+    }
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        return fallback
+    prompt = "请根据以下创业者经营数据生成一份极简中文早间经营简报。只输出 JSON，不要 Markdown：{\"summary\":\"不超过100字，明确当前状态和最大风险\",\"life_advice\":[\"1-2条人生与精力建议\"],\"finance_advice\":[\"1-3条财务建议\"],\"work_advice\":[\"1-3条工作与项目建议\"]}。涉及现金预测时必须写清未来预测窗口内的最低现金余额、金额、日期；负数才称为现金缺口，不能把某一天的余额说成当天要支付的金额。金额字段已经是人民币元，不要换算。数据：" + json.dumps(context, ensure_ascii=False)
+    payload = {"model": settings.deepseek_chat_model, "messages": [{"role": "system", "content": "你是创业者的经营顾问，只根据给定数据，不臆测金额；建议要具体、短、可执行。"}, {"role": "user", "content": prompt}], "temperature": 0.2}
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{settings.deepseek_base_url.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {settings.deepseek_api_key}", "Content-Type": "application/json"}, json=payload)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"].get("content") or ""
+            parsed = json.loads(content.strip().strip("`").removeprefix("json").strip())
+            def items(key: str) -> list[str]:
+                return [str(item).strip() for item in parsed.get(key, []) if str(item).strip()][:3]
+            return {"summary": str(parsed.get("summary") or fallback["summary"]), "life_advice": items("life_advice") or fallback["life_advice"], "finance_advice": items("finance_advice") or fallback["finance_advice"], "work_advice": items("work_advice") or fallback["work_advice"], "date": date.today().isoformat()}
+    except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError):
+        return fallback
+
+
 def _extract_suggestions(content: str) -> tuple[str, list[str]]:
     """Keep the model protocol human-readable while exposing choices to the app."""
     lines = content.splitlines()

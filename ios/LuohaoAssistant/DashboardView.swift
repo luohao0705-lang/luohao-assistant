@@ -14,6 +14,7 @@ struct DashboardView: View {
             ScrollView {
                 if state.dashboard != nil {
                     VStack(alignment: .leading, spacing: 20) {
+                        morningBriefSection
                         dailySection
                         planningWindowSection
                         projectSection
@@ -38,6 +39,33 @@ struct DashboardView: View {
             .sheet(item: $selectedProject) { ProjectWarRoom(project: $0) }
             .sheet(isPresented: $showingWeeklyPlan) { WeeklyPlanView(state: state) }
             .scrollContentBackground(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private var morningBriefSection: some View {
+        if let brief = state.morningBrief {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("今日经营简报").font(.title3.weight(.semibold))
+                    Spacer()
+                    Text(brief.date).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(brief.summary).font(.subheadline).foregroundStyle(.primary)
+                adviceGroup(title: "人生建议", icon: "figure.mind.and.body", items: brief.lifeAdvice)
+                adviceGroup(title: "财务建议", icon: "yensign.circle", items: brief.financeAdvice)
+                adviceGroup(title: "工作建议", icon: "checklist", items: brief.workAdvice)
+            }
+            .surfaceCard(padding: 16)
+        }
+    }
+
+    private func adviceGroup(title: String, icon: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(title, systemImage: icon).font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+            ForEach(items, id: \.self) { item in
+                Text(item).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -67,6 +95,8 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("先看现金，再决定行动").font(.subheadline).foregroundStyle(.secondary)
             Text(currency.string(from: NSNumber(value: Double(d.cashCents) / 100)) ?? "-").font(.system(size: 38, weight: .bold, design: .rounded)).monospacedDigit()
+            Text(d.forecastLowestBalanceCents < 0 ? "未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)；预计现金缺口为 \(currency.string(from: NSNumber(value: Double(-d.forecastLowestBalanceCents) / 100)) ?? \"-\")。" : "未来预测窗口内最低现金余额为 \(lowestForecast)，发生在 \(d.forecastLowestDate)。")
+                .font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
             Text("当前可用现金 · 预测最低 \(lowestForecast) · \(d.forecastLowestDate)").font(.caption).foregroundStyle(d.forecastLowestBalanceCents < 0 ? .red : .secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

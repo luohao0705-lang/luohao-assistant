@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, debt_monthly_payment_cents, legacy_debt_transactions, legacy_monthly_payment_cents, legacy_payment_day, morning_brief, run_assistant, task_priority_score
+from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, debt_monthly_payment_cents, legacy_debt_transactions, legacy_monthly_payment_cents, legacy_payment_day, morning_brief_v2, run_assistant, task_priority_score
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Account, AssistantAction, DecisionRecord, Debt, EventLog, Memory, Project, Task, TaskDependency, Transaction, WeeklyPlan
@@ -140,7 +140,7 @@ def daily_focus(_: str = Depends(require_auth), db: Session = Depends(get_db)) -
 
 @app.get("/morning-brief")
 async def morning_brief_endpoint(_: str = Depends(require_auth), db: Session = Depends(get_db)) -> dict:
-    return await morning_brief(db)
+    return await morning_brief_v2(db)
 
 
 @app.get("/finance/accounts")

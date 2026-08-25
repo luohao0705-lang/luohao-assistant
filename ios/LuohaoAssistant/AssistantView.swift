@@ -45,8 +45,6 @@ struct AssistantView: View {
 
                 VStack(spacing: 0) {
                     assistantHeader
-                    morningBriefCard
-
                     ScrollViewReader { proxy in
                         ScrollView(.vertical) {
                             LazyVStack(alignment: .leading, spacing: 18) {
@@ -134,30 +132,6 @@ struct AssistantView: View {
         .padding(.vertical, 12)
         .background(Color(.secondarySystemGroupedBackground))
         .overlay(alignment: .bottom) { Divider() }
-    }
-
-    @ViewBuilder
-    private var morningBriefCard: some View {
-        if let brief = state.morningBrief {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 7) {
-                    Image(systemName: "sunrise.fill").foregroundStyle(.orange)
-                    Text("今日经营简报").font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(brief.date).font(.caption2).foregroundStyle(.secondary)
-                }
-                Text(brief.summary).font(.subheadline).foregroundStyle(.primary)
-                ForEach(Array(brief.advice.enumerated()), id: \.offset) { index, advice in
-                    Label(advice, systemImage: "\(index + 1).circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-        }
     }
 
     private var statusText: String {

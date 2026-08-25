@@ -3,8 +3,9 @@ import UserNotifications
 
 enum DebtReminderScheduler {
     private static let identifierPrefix = "luohao.debt."
+    private static let taskIdentifierPrefix = "luohao.task."
 
-    static func sync(debts: [DebtSummary]) async {
+    static func sync(debts: [DebtSummary], tasks: [FocusTask] = []) async {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         if settings.authorizationStatus == .notDetermined {
@@ -12,7 +13,7 @@ enum DebtReminderScheduler {
         }
 
         let pending = await center.pendingNotificationRequests()
-        let oldIdentifiers = pending.map(\.identifier).filter { $0.hasPrefix(identifierPrefix) }
+        let oldIdentifiers = pending.map(\.identifier).filter { $0.hasPrefix(identifierPrefix) || $0.hasPrefix(taskIdentifierPrefix) }
         if !oldIdentifiers.isEmpty { center.removePendingNotificationRequests(withIdentifiers: oldIdentifiers) }
 
         let calendar = Calendar(identifier: .gregorian)
@@ -31,9 +32,26 @@ enum DebtReminderScheduler {
             content.title = "还款提醒"
             // Keep lock-screen notifications private. The detail is available in the app.
             content.body = "你有一条消息待查看"
+            content.title = "经营助理"
+            content.body = "你有一条消息待查看"
             content.sound = .default
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             let request = UNNotificationRequest(identifier: "\(identifierPrefix)\(debt.id)", content: content, trigger: trigger)
+            try? await center.add(request)
+        }
+
+        for task in tasks where task.status != "done" {
+            guard let dueOn = task.dueOn, let dueDate = formatter.date(from: dueOn) else { continue }
+            guard calendar.startOfDay(for: dueDate) >= calendar.startOfDay(for: Date()) else { continue }
+            var components = calendar.dateComponents([.year, .month, .day], from: dueDate)
+            components.hour = 9
+            components.minute = 0
+            let content = UNMutableNotificationContent()
+            content.title = "经营助理"
+            content.body = "你有一条消息待查看"
+            content.sound = .default
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            let request = UNNotificationRequest(identifier: "\(taskIdentifierPrefix)\(task.id)", content: content, trigger: trigger)
             try? await center.add(request)
         }
     }

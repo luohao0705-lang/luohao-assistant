@@ -25,8 +25,16 @@ struct DashboardSummary: Decodable {
 
 struct MorningBrief: Decodable {
     let summary: String
-    let advice: [String]
+    let lifeAdvice: [String]
+    let financeAdvice: [String]
+    let workAdvice: [String]
     let date: String
+    enum CodingKeys: String, CodingKey {
+        case summary, date
+        case lifeAdvice = "life_advice"
+        case financeAdvice = "finance_advice"
+        case workAdvice = "work_advice"
+    }
 }
 
 struct CashflowPoint: Decodable, Identifiable {
