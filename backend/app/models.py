@@ -44,6 +44,8 @@ class Debt(Base):
     principal_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     outstanding_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    monthly_payment_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payment_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     interest_rate: Mapped[Decimal | None] = mapped_column(Numeric(8, 4), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

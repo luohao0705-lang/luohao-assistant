@@ -48,6 +48,8 @@ class DebtCreate(BaseModel):
     principal_cents: int = Field(gt=0)
     outstanding_cents: int = Field(ge=0)
     due_on: date | None = None
+    monthly_payment_cents: int | None = Field(default=None, ge=0)
+    payment_day: int | None = Field(default=None, ge=1, le=31)
     interest_rate: float | None = Field(default=None, ge=0)
     note: str | None = None
 
@@ -57,6 +59,8 @@ class DebtUpdate(BaseModel):
     principal_cents: int | None = Field(default=None, gt=0)
     outstanding_cents: int | None = Field(default=None, ge=0)
     due_on: date | None = None
+    monthly_payment_cents: int | None = Field(default=None, ge=0)
+    payment_day: int | None = Field(default=None, ge=1, le=31)
     interest_rate: float | None = Field(default=None, ge=0)
     status: str | None = Field(default=None, pattern="^(open|paid|overdue|cancelled)$")
     note: str | None = None

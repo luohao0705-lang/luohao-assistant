@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, legacy_debt_transactions, run_assistant, task_priority_score
+from .assistant import cashflow_forecast, daily_focus_snapshot, dashboard_snapshot, debt_monthly_payment_cents, legacy_debt_transactions, legacy_monthly_payment_cents, legacy_payment_day, run_assistant, task_priority_score
 from .config import get_settings
 from .db import Base, engine, get_db
 from .models import Account, AssistantAction, DecisionRecord, Debt, EventLog, Memory, Project, Task, TaskDependency, Transaction, WeeklyPlan
@@ -180,6 +180,8 @@ def list_debts(status: str | None = Query(default=None), _: str = Depends(requir
         "id": item.id, "creditor": item.creditor,
         "principal_cents": item.principal_cents, "outstanding_cents": item.outstanding_cents,
         "due_on": item.due_on.isoformat() if item.due_on else None,
+        "monthly_payment_cents": debt_monthly_payment_cents(item),
+        "payment_day": item.payment_day,
         "interest_rate": float(item.interest_rate) if item.interest_rate is not None else None,
         "status": item.status, "note": item.note,
     } for item in items]
@@ -190,6 +192,8 @@ def list_debts(status: str | None = Query(default=None), _: str = Depends(requir
             "principal_cents": item.amount_cents,
             "outstanding_cents": item.amount_cents,
             "due_on": item.expected_on.isoformat() if item.expected_on else None,
+            "monthly_payment_cents": legacy_monthly_payment_cents(item),
+            "payment_day": legacy_payment_day(item),
             "interest_rate": None,
             "status": "open",
             "note": item.note,

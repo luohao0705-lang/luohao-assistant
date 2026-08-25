@@ -57,10 +57,12 @@ struct DebtSummary: Decodable, Identifiable {
     let principalCents: Int
     let outstandingCents: Int
     let dueOn: String?
+    let monthlyPaymentCents: Int?
+    let paymentDay: Int?
     let interestRate: Double?
     let status: String
     let note: String?
-    enum CodingKeys: String, CodingKey { case id, creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case status, note }
+    enum CodingKeys: String, CodingKey { case id, creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case monthlyPaymentCents = "monthly_payment_cents"; case paymentDay = "payment_day"; case interestRate = "interest_rate"; case status, note }
 }
 
 struct TransactionCreateRequest: Encodable {
@@ -97,9 +99,11 @@ struct DebtCreateRequest: Encodable {
     let principalCents: Int
     let outstandingCents: Int
     let dueOn: String?
+    let monthlyPaymentCents: Int?
+    let paymentDay: Int?
     let interestRate: Double?
     let note: String?
-    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case interestRate = "interest_rate"; case note }
+    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case monthlyPaymentCents = "monthly_payment_cents"; case paymentDay = "payment_day"; case interestRate = "interest_rate"; case note }
 }
 
 struct DebtUpdateRequest: Encodable {
@@ -107,9 +111,11 @@ struct DebtUpdateRequest: Encodable {
     let principalCents: Int?
     let outstandingCents: Int?
     let dueOn: String?
+    let monthlyPaymentCents: Int?
+    let paymentDay: Int?
     let status: String?
     let note: String?
-    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case status, note }
+    enum CodingKeys: String, CodingKey { case creditor; case principalCents = "principal_cents"; case outstandingCents = "outstanding_cents"; case dueOn = "due_on"; case monthlyPaymentCents = "monthly_payment_cents"; case paymentDay = "payment_day"; case status, note }
 }
 
 struct MemoryCreateRequest: Encodable {

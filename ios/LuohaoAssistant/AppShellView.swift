@@ -47,6 +47,7 @@ struct FinanceView: View {
     @State private var selectedTransaction: TransactionSummary?
     @State private var selectedDebt: DebtSummary?
     @State private var selectedDueDate: Date?
+    @State private var selectedPaymentWindow: Int?
     private let currency: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -83,8 +84,8 @@ struct FinanceView: View {
                         DebtCalendarSection(debts: state.debts, selectedDate: $selectedDueDate)
                     }
 
-                    PageSectionHeader(title: "近期要还", detail: "按到期日排序")
-                    upcomingDebtSection
+                    PageSectionHeader(title: "本月近期要还", detail: "只统计本月月供")
+                    paymentWindowSection
 
                     PageSectionHeader(title: "按人查看", detail: "每位债权人的未偿金额")
                     creditorSection
@@ -174,6 +175,125 @@ struct FinanceView: View {
                 .surfaceCard(padding: 12, radius: 14)
             }
         }
+    }
+
+    private var paymentWindowSection: some View {
+        let windows = [3, 7, 15, 30]
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                ForEach(windows, id: .self) { days in
+                    Button { selectedPaymentWindow = days } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("近\(days)天")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(formatCurrency(paymentTotal(within: days)))
+                                .font(.subheadline.weight(.semibold))
+                                .monospacedDigit()
+                                .minimumScaleFactor(0.72)
+                                .lineLimit(1)
+                                .foregroundStyle(paymentTotal(within: days) > 0 ? LuohaoDesign.accent : .primary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 8)
+                        .background(selectedPaymentWindow == days ? LuohaoDesign.accentTint : LuohaoDesign.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(selectedPaymentWindow == days ? LuohaoDesign.accent.opacity(0.45) : LuohaoDesign.hairline, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("近\(days)天本期应还 \(formatCurrency(paymentTotal(within: days)))")
+                }
+            }
+            if let selectedPaymentWindow {
+                let items = monthlyPaymentItems.filter { daysBetweenTodayAnd($0.date) <= selectedPaymentWindow }
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("近\(selectedPaymentWindow)天明细")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(formatCurrency(items.reduce(0) { $0 + $1.paymentCents }))
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .padding(.bottom, 8)
+                    if items.isEmpty {
+                        Text("这段时间没有已记录的月供")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    } else {
+                        ForEach(items) { item in
+                            Button { if item.debt.id > 0 { selectedDebt = item.debt } } label: {
+                                HStack(spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(item.debt.creditor)
+                                            .font(.subheadline.weight(.medium))
+                                        Text("\(shortDate(item.date)) · 本期月供")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(formatCurrency(item.paymentCents))
+                                        .font(.subheadline.weight(.semibold))
+                                        .monospacedDigit()
+                                    if item.debt.id > 0 {
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            if item.id != items.last?.id { Divider() }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(LuohaoDesign.accentTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            let missingCount = state.debts.filter { $0.outstandingCents > 0 && $0.monthlyPaymentCents == nil }.count
+            if missingCount > 0 {
+                Label("\(missingCount) 笔债务尚未记录月供，未计入上方应还金额", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private struct MonthlyPaymentItem: Identifiable {
+        let debt: DebtSummary
+        let date: Date
+        let paymentCents: Int
+        var id: String { "\(debt.id)-\(date.timeIntervalSince1970)" }
+    }
+
+    private var monthlyPaymentItems: [MonthlyPaymentItem] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let endOfMonth = calendar.dateInterval(of: .month, for: today)?.end ?? today
+        return state.debts.compactMap { debt in
+            guard debt.outstandingCents > 0, let paymentCents = debt.monthlyPaymentCents, paymentCents > 0 else { return nil }
+            let day = debt.paymentDay ?? parseDate(debt.dueOn).map { calendar.component(.day, from: $0) }
+            guard let day else { return nil }
+            let date = calendar.date(from: DateComponents(year: calendar.component(.year, from: today), month: calendar.component(.month, from: today), day: min(day, calendar.range(of: .day, in: .month, for: today)?.count ?? day)))!
+            guard date >= today && date < endOfMonth else { return nil }
+            return MonthlyPaymentItem(debt: debt, date: date, paymentCents: paymentCents)
+        }
+        .sorted { $0.date == $1.date ? $0.debt.creditor < $1.debt.creditor : $0.date < $1.date }
+    }
+
+    private func paymentTotal(within days: Int) -> Int {
+        monthlyPaymentItems.filter { daysBetweenTodayAnd($0.date) <= days }.reduce(0) { $0 + $1.paymentCents }
+    }
+
+    private func daysBetweenTodayAnd(_ date: Date) -> Int {
+        Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? Int.max
     }
 
     private func upcomingDebtRow(_ debt: DebtSummary) -> some View {
@@ -316,7 +436,7 @@ private struct DebtCalendarSection: View {
     }
     private var grouped: [Date: [DebtSummary]] {
         Dictionary(grouping: debts.filter { $0.outstandingCents > 0 }) { debt in
-            guard let value = debt.dueOn, let date = parse(value) else { return Date.distantFuture }
+            guard let date = paymentDate(for: debt) else { return Date.distantFuture }
             return calendar.startOfDay(for: date)
         }
     }
@@ -324,7 +444,7 @@ private struct DebtCalendarSection: View {
         guard let selectedDate else { return [] }
         return grouped[calendar.startOfDay(for: selectedDate)] ?? []
     }
-    private var selectedTotal: Int { selectedDebts.reduce(0) { $0 + $1.outstandingCents } }
+    private var selectedTotal: Int { selectedDebts.reduce(0) { $0 + ($1.monthlyPaymentCents ?? 0) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -350,7 +470,11 @@ private struct DebtCalendarSection: View {
                         Text(format(selectedTotal)).font(.subheadline.weight(.semibold)).monospacedDigit()
                     }
                     ForEach(selectedDebts) { debt in
-                        HStack { Text(debt.creditor); Spacer(); Text(format(debt.outstandingCents)).monospacedDigit() }
+                        HStack {
+                            Text(debt.creditor)
+                            Spacer()
+                            Text(debt.monthlyPaymentCents.map(format) ?? "月供未记录").monospacedDigit()
+                        }
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -407,6 +531,14 @@ private struct DebtCalendarSection: View {
         return formatter.date(from: value)
     }
 
+    private func paymentDate(for debt: DebtSummary) -> Date? {
+        let base = monthStart
+        let day = debt.paymentDay ?? debt.dueOn.flatMap { parse($0) }.map { calendar.component(.day, from: $0) }
+        guard let day else { return nil }
+        let maxDay = calendar.range(of: .day, in: .month, for: base)?.count ?? day
+        return calendar.date(from: DateComponents(year: calendar.component(.year, from: base), month: calendar.component(.month, from: base), day: min(day, maxDay)))
+    }
+
     private func format(_ cents: Int) -> String {
         let formatter = NumberFormatter(); formatter.numberStyle = .currency; formatter.currencyCode = "CNY"
         return formatter.string(from: NSNumber(value: Double(cents) / 100)) ?? "¥0"
@@ -422,6 +554,8 @@ struct FinanceEntryView: View {
     @State private var counterparty = ""
     @State private var note = ""
     @State private var dueOn = ""
+    @State private var monthlyPayment = ""
+    @State private var paymentDay = ""
     @State private var entryType: String
     @State private var accountKind = "bank"
     @State private var isSaving = false
@@ -452,6 +586,8 @@ struct FinanceEntryView: View {
                     TextField("本金（元）", text: $amount).keyboardType(.decimalPad)
                     TextField("未偿余额（元）", text: $counterparty).keyboardType(.decimalPad)
                     TextField("到期日 YYYY-MM-DD（可选）", text: $dueOn)
+                    TextField("每月还款金额（元，可选）", text: $monthlyPayment).keyboardType(.decimalPad)
+                    TextField("每月还款日（1-31，可选）", text: $paymentDay).keyboardType(.numberPad)
                     TextField("备注（可选）", text: $note, axis: .vertical)
                 } else {
                     TextField("账户名称", text: $creditor)
@@ -500,7 +636,9 @@ struct FinanceEntryView: View {
                     try await state.api.createTransaction(TransactionCreateRequest(accountId: nil, kind: kind, amountCents: Int(value * 100), occurredOn: today(), status: "confirmed", counterparty: counterparty.isEmpty ? nil : counterparty, note: note.isEmpty ? nil : note))
                 } else if entryType == "债务" {
                     let outstanding = Double(counterparty) ?? value
-                    try await state.api.createDebt(DebtCreateRequest(creditor: creditor, principalCents: Int(value * 100), outstandingCents: Int(outstanding * 100), dueOn: dueOn.isEmpty ? nil : dueOn, interestRate: nil, note: note.isEmpty ? nil : note))
+                    let payment = Double(monthlyPayment).map { Int($0 * 100) }
+                    let day = Int(paymentDay)
+                    try await state.api.createDebt(DebtCreateRequest(creditor: creditor, principalCents: Int(value * 100), outstandingCents: Int(outstanding * 100), dueOn: dueOn.isEmpty ? nil : dueOn, monthlyPaymentCents: payment, paymentDay: day, interestRate: nil, note: note.isEmpty ? nil : note))
                 } else {
                     try await state.api.createAccount(AccountCreateRequest(name: creditor, kind: accountKind, balanceCents: Int(value * 100), currency: "CNY"))
                 }
@@ -593,6 +731,8 @@ struct DebtEditView: View {
     @State private var principal: String
     @State private var outstanding: String
     @State private var dueOn: String
+    @State private var monthlyPayment: String
+    @State private var paymentDay: String
     @State private var status: String
     @State private var note: String
     @State private var isSaving = false
@@ -605,6 +745,8 @@ struct DebtEditView: View {
         _principal = State(initialValue: String(format: "%.2f", Double(item.principalCents) / 100))
         _outstanding = State(initialValue: String(format: "%.2f", Double(item.outstandingCents) / 100))
         _dueOn = State(initialValue: item.dueOn ?? "")
+        _monthlyPayment = State(initialValue: item.monthlyPaymentCents.map { String(format: "%.2f", Double($0) / 100) } ?? "")
+        _paymentDay = State(initialValue: item.paymentDay.map(String.init) ?? "")
         _status = State(initialValue: item.status)
         _note = State(initialValue: item.note ?? "")
     }
@@ -616,6 +758,8 @@ struct DebtEditView: View {
                 TextField("本金（元）", text: $principal).keyboardType(.decimalPad)
                 TextField("未偿余额（元）", text: $outstanding).keyboardType(.decimalPad)
                 TextField("到期日 YYYY-MM-DD", text: $dueOn)
+                TextField("每月还款金额（元，可选）", text: $monthlyPayment).keyboardType(.decimalPad)
+                TextField("每月还款日（1-31，可选）", text: $paymentDay).keyboardType(.numberPad)
                 Picker("状态", selection: $status) { Text("未偿还").tag("open"); Text("已还清").tag("paid"); Text("已逾期").tag("overdue"); Text("已取消").tag("cancelled") }
                 TextField("备注", text: $note, axis: .vertical)
                 if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
@@ -646,7 +790,9 @@ struct DebtEditView: View {
         isSaving = true; errorMessage = nil
         Task {
             do {
-                try await state.api.updateDebt(item.id, DebtUpdateRequest(creditor: creditor, principalCents: Int(p * 100), outstandingCents: Int(o * 100), dueOn: dueOn.isEmpty ? nil : dueOn, status: status, note: note.isEmpty ? nil : note))
+                let payment = Double(monthlyPayment).map { Int($0 * 100) }
+                let day = Int(paymentDay)
+                try await state.api.updateDebt(item.id, DebtUpdateRequest(creditor: creditor, principalCents: Int(p * 100), outstandingCents: Int(o * 100), dueOn: dueOn.isEmpty ? nil : dueOn, monthlyPaymentCents: payment, paymentDay: day, status: status, note: note.isEmpty ? nil : note))
                 await state.refreshDashboard(); dismiss()
             } catch { errorMessage = error.localizedDescription; isSaving = false }
         }
