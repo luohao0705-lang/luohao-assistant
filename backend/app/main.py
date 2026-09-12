@@ -1,9 +1,12 @@
 import json
 import re
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -19,6 +22,25 @@ if settings.app_env.lower() != "production":
     Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Luohao Assistant API", version="0.4.0")
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+web_root = Path(__file__).with_name("web")
+app.mount("/finance-assets", StaticFiles(directory=web_root), name="finance-assets")
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/finance", include_in_schema=False)
+def finance_web_app() -> FileResponse:
+    return FileResponse(web_root / "index.html")
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def finance_web_manifest() -> FileResponse:
+    return FileResponse(web_root / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js", include_in_schema=False)
+def finance_service_worker() -> FileResponse:
+    return FileResponse(web_root / "sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 
 def _task_dependencies(item: Task, db: Session) -> list[int]:

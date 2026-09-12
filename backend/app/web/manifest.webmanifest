@@ -1,0 +1,19 @@
+{
+  "name": "洛浩财务驾驶舱",
+  "short_name": "财务驾驶舱",
+  "description": "私人财务风险、收入与债务管理工具",
+  "start_url": "/finance",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f3",
+  "theme_color": "#f7f6f3",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/finance-assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
