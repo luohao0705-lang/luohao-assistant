@@ -48,6 +48,8 @@ const state = {
   ]
 };
 
+let loginTimer = null;
+
 const els = {
   loginScreen: document.getElementById("login-screen"),
   appShell: document.getElementById("app-shell"),
@@ -383,7 +385,7 @@ function calendarPayments(month) {
   const first = startOfMonth(month);
   const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
   const days = Math.round((last - first) / 86400000);
-  return scheduledPayments(days, first);
+  return scheduledPayments(days, first).filter(item => item.date.getFullYear() === first.getFullYear() && item.date.getMonth() === first.getMonth());
 }
 
 function renderCalendar() {
@@ -417,7 +419,7 @@ function renderCalendar() {
     <div class="calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
     <div class="calendar-grid">${cells.map(cell => {
       const key = localISO(cell.date);
-      return `<button class="calendar-day ${cell.muted ? "muted" : ""} ${key === today ? "today" : ""} ${byDate.has(key) ? "has-payment" : ""} ${key === state.selectedDate ? "selected" : ""}" data-date="${key}" aria-label="${formatDate(cell.date, true)}${byDate.has(key) ? "有还款" : ""}">${cell.date.getDate()}</button>`;
+      return `<button class="calendar-day ${cell.muted ? "muted" : ""} ${key === today ? "today" : ""} ${byDate.has(key) ? "has-payment" : ""} ${key === state.selectedDate ? "selected" : ""}" data-date="${key}" ${cell.muted ? "disabled" : ""} aria-label="${formatDate(cell.date, true)}${byDate.has(key) ? "有还款" : ""}">${cell.date.getDate()}</button>`;
     }).join("")}</div>
     ${state.selectedDate ? `<div class="calendar-detail"><div class="calendar-detail-head"><span>${formatDate(state.selectedDate)} 应还</span><span>${money(selectedItems.reduce((sum, item) => sum + item.amount, 0))}</span></div>${selectedItems.length ? selectedItems.map(item => `<div class="list-row"><div class="list-row-main"><p class="list-row-title">${escapeHtml(item.debt.creditor)}</p><p class="list-row-meta">${isFixedAsset(item.debt) ? "固定资产月供" : "本期月供"}</p></div><span class="list-row-value">${money(item.amount)}</span></div>`).join("") : '<p class="list-row-meta">当天没有待还款项</p>'}</div>` : ""}
   </div>`;
@@ -594,7 +596,7 @@ function startVoice() {
   state.recognition = recognition;
   recognition.lang = "zh-CN";
   recognition.continuous = false;
-  recognition.interimResults = true;
+  recognition.interimResults = false;
   recognition.onstart = () => { state.listening = true; document.querySelector(".voice-button")?.classList.add("listening"); };
   recognition.onresult = event => {
     let text = "";
@@ -669,11 +671,18 @@ els.loginForm.addEventListener("submit", event => {
 });
 
 els.password.addEventListener("input", () => {
+  if (loginTimer) clearTimeout(loginTimer);
   els.password.value = els.password.value.replace(/\D/g, "").slice(0, 8);
   els.loginButton.classList.toggle("ready", els.password.value.length > 0);
   els.loginButton.disabled = els.password.value.length === 0;
   els.loginError.textContent = "";
-  if (els.password.value.length === 2) setTimeout(() => login(els.password.value), 120);
+  if (els.password.value.length === 2) {
+    const submittedPassword = els.password.value;
+    loginTimer = setTimeout(() => {
+      loginTimer = null;
+      if (els.password.value === submittedPassword) login(submittedPassword);
+    }, 120);
+  }
 });
 
 els.passwordToggle.addEventListener("click", () => {
@@ -694,7 +703,7 @@ document.addEventListener("click", event => {
   const month = event.target.closest("[data-month]");
   if (month) { state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + Number(month.dataset.month), 1); state.selectedDate = ""; renderPage(); return; }
   const date = event.target.closest("[data-date]");
-  if (date) { state.selectedDate = date.dataset.date; renderPage(); return; }
+  if (date && !date.disabled) { state.selectedDate = date.dataset.date; renderPage(); return; }
   const owner = event.target.closest("[data-owner]");
   if (owner) { state.expandedOwner = state.expandedOwner === owner.dataset.owner ? "" : owner.dataset.owner; renderPage(); return; }
   const assistantPrompt = event.target.closest("[data-assistant-prompt]");
